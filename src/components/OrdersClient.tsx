@@ -40,20 +40,60 @@ const PAY: Record<string, string> = {
   CREDIT: 'เครดิต',
 };
 
+type ShopSettings = {
+  shop_name?: string;
+  shop_phone?: string;
+  shop_address?: string;
+  receipt_note?: string;
+};
+
 export default function OrdersClient({
   role,
   orders,
   profMap,
   drivers,
+  settings,
 }: {
   role: Role;
   orders: OrderRow[];
   profMap: Record<string, string>;
   drivers: { id: string; name: string }[];
+  settings: ShopSettings;
 }) {
   const supabase = createClient();
   const router = useRouter();
   const isAdmin = role === 'admin';
+
+  function printReceipt(o: OrderRow, its: OrderItem[]) {
+    const rows = its
+      .map(
+        (i) =>
+          `<tr><td>${i.name}<br><span style="color:#888;font-size:11px">${i.unit}</span></td><td style="text-align:center">${i.qty}</td><td style="text-align:right">${i.sell_price.toFixed(2)}</td><td style="text-align:right">${(i.sell_price * i.qty).toFixed(2)}</td></tr>`
+      )
+      .join('');
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>บิล ${o.code}</title>
+      <style>*{font-family:Tahoma,sans-serif}body{max-width:320px;margin:auto;padding:10px;color:#000;font-size:13px}
+      h2{text-align:center;margin:2px 0}.c{text-align:center}.muted{color:#555;font-size:12px}
+      table{width:100%;border-collapse:collapse;margin-top:8px}td,th{padding:4px 2px;border-bottom:1px dashed #bbb}
+      th{text-align:left;border-bottom:1px solid #000}.tot{font-weight:bold;font-size:15px;border-top:2px solid #000}
+      @media print{button{display:none}}</style></head><body>
+      <h2>${settings.shop_name || 'เจ้านายฟาร์มเป็ด'}</h2>
+      ${settings.shop_address ? `<div class="c muted">${settings.shop_address}</div>` : ''}
+      ${settings.shop_phone ? `<div class="c muted">โทร. ${settings.shop_phone}</div>` : ''}
+      <div class="c muted">ใบเสร็จรับเงิน / บิลขายสินค้า</div>
+      <div class="muted" style="margin-top:6px">เลขที่: ${o.code}<br>ลูกค้า: ${o.customers?.name ?? '-'}</div>
+      <table><thead><tr><th>รายการ</th><th class="c">จำนวน</th><th style="text-align:right">ราคา</th><th style="text-align:right">รวม</th></tr></thead><tbody>${rows}</tbody></table>
+      <table><tr class="tot"><td>รวมทั้งสิ้น</td><td style="text-align:right">${o.total_sell.toFixed(2)} บาท</td></tr>
+      <tr><td class="muted">ชำระโดย</td><td style="text-align:right" class="muted">${PAY[o.pay_method]}</td></tr></table>
+      ${settings.receipt_note ? `<div class="c muted" style="margin-top:12px">${settings.receipt_note}</div>` : ''}
+      <div class="c" style="margin-top:12px"><button onclick="window.print()" style="padding:8px 20px">🖨️ พิมพ์</button></div>
+      </body></html>`;
+    const w = window.open('', '_blank', 'width=380,height=640');
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+    }
+  }
 
   const [open, setOpen] = useState<OrderRow | null>(null);
   const [items, setItems] = useState<OrderItem[]>([]);
@@ -243,6 +283,13 @@ export default function OrdersClient({
                 💳 บันทึกรับชำระแล้ว
               </button>
             )}
+
+            <button
+              className="w-full bg-gray-100 rounded-lg py-2 mb-2 text-sm"
+              onClick={() => printReceipt(open, items)}
+            >
+              🖨️ พิมพ์ใบเสร็จ / บิล
+            </button>
 
             <div className="flex justify-end gap-2 mt-2">
               <button

@@ -37,7 +37,15 @@ const ROLE_LABEL: Record<Role, string> = {
   delivery: 'คนส่ง',
 };
 
-export default function Sidebar({ role, name }: { role: Role; name: string }) {
+export default function Sidebar({
+  role,
+  name,
+  badges = {},
+}: {
+  role: Role;
+  name: string;
+  badges?: Record<string, number>;
+}) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
   const links = NAV[role] || [];
@@ -78,11 +86,16 @@ export default function Sidebar({ role, name }: { role: Role; name: string }) {
                 key={href}
                 href={href}
                 onClick={() => setOpen(false)}
-                className={`block px-4 py-2.5 rounded-lg my-0.5 text-sm ${
+                className={`flex items-center justify-between px-4 py-2.5 rounded-lg my-0.5 text-sm ${
                   active ? 'bg-green-600 text-white' : 'hover:bg-white/10'
                 }`}
               >
-                {label}
+                <span>{label}</span>
+                {badges[href] > 0 && (
+                  <span className="bg-red-500 text-white text-xs font-bold min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center">
+                    {badges[href] > 99 ? '99+' : badges[href]}
+                  </span>
+                )}
               </Link>
             );
           })}

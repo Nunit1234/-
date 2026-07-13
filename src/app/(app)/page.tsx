@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
+import DashboardClient from '@/components/DashboardClient';
 
-export default async function DashboardPage() {
+export default async function Home() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -10,44 +11,25 @@ export default async function DashboardPage() {
     .select('name, role')
     .eq('id', user!.id)
     .single();
+  const role = profile?.role ?? 'delivery';
 
-  // นับข้อมูลคร่าว ๆ
-  const [{ count: productCount }, { count: customerCount }] = await Promise.all([
-    supabase.from('products').select('*', { count: 'exact', head: true }),
-    supabase.from('customers').select('*', { count: 'exact', head: true }),
-  ]);
+  if (role !== 'admin') {
+    return (
+      <div className="p-5 max-w-2xl">
+        <h1 className="text-2xl font-bold text-green-900 mb-1">
+          สวัสดี {profile?.name || user?.email}
+        </h1>
+        <p className="text-gray-500">คนส่ง — ใช้เมนูซ้ายเพื่อดูสต๊อก งานส่ง และขายสินค้า</p>
+      </div>
+    );
+  }
 
-  const isAdmin = profile?.role === 'admin';
+  const { data: lowStock } = await supabase
+    .from('products')
+    .select('name, unit, stock')
+    .eq('active', true)
+    .lte('stock', 15)
+    .order('stock');
 
-  return (
-    <div className="p-5 max-w-4xl">
-      <h1 className="text-2xl font-bold text-green-900 mb-1">
-        สวัสดี {profile?.name || user?.email}
-      </h1>
-      <p className="text-gray-500 mb-5">
-        {isAdmin ? 'แดชบอร์ดผู้ดูแลระบบ' : 'หน้าหลักคนส่ง'}
-      </p>
-
-      {isAdmin && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <div className="bg-white rounded-xl shadow p-4">
-            <div className="text-gray-500 text-sm">สินค้าทั้งหมด</div>
-            <div className="text-2xl font-bold text-green-800">
-              {productCount ?? 0}
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow p-4">
-            <div className="text-gray-500 text-sm">ลูกค้าทั้งหมด</div>
-            <div className="text-2xl font-bold text-green-800">
-              {customerCount ?? 0}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <p className="text-gray-400 text-sm mt-6">
-        (แดชบอร์ดสรุปยอดขาย/กำไร แบบเต็มจะเพิ่มในเฟสถัดไป)
-      </p>
-    </div>
-  );
+  return <DashboardClient name={profile?.name || ''} lowStock={lowStock ?? []} />;
 }

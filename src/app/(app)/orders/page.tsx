@@ -36,12 +36,19 @@ export default async function OrdersPage() {
     drivers = data ?? [];
   }
 
+  const { data: settings } = await supabase
+    .from('settings')
+    .select('shop_name, shop_phone, shop_address, receipt_note')
+    .eq('id', 1)
+    .single();
+
   return (
     <OrdersClient
       role={role}
       orders={orders ?? []}
       profMap={profMap}
       drivers={drivers}
+      settings={settings ?? {}}
     />
   );
 }
