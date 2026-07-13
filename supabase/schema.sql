@@ -234,52 +234,153 @@ alter table commissions     enable row level security;
 alter table settings        enable row level security;
 
 -- profiles: อ่านของตัวเอง + แอดมินอ่าน/แก้ทั้งหมด
-create policy p_prof_self   on profiles for select using (id = auth.uid() or is_admin());
-create policy p_prof_admin  on profiles for all    using (is_admin()) with check (is_admin());
+drop policy if exists p_prof_self  on profiles;
+create policy p_prof_self  on profiles for select using (id = auth.uid() or is_admin());
+drop policy if exists p_prof_admin on profiles;
+create policy p_prof_admin on profiles for all using (is_admin()) with check (is_admin());
 
--- ตารางอ้างอิง: ผู้ล็อกอินทุกคนอ่านได้ / เขียนได้เฉพาะแอดมิน
+-- ตารางอ้างอิง: ผู้ล็อกอินทุกคนอ่านได้ / เขียนได้เฉพาะแอดมิน (รันซ้ำได้)
 do $$
 declare t text;
 begin
   foreach t in array array['customers','products','customer_prices','settings','expenses','commissions','allocations','allocation_items'] loop
+    execute format('drop policy if exists %I on %I;', t||'_ro', t);
     execute format('create policy %I on %I for select using (auth.role() = ''authenticated'');', t||'_ro', t);
+    execute format('drop policy if exists %I on %I;', t||'_admin', t);
     execute format('create policy %I on %I for all using (is_admin()) with check (is_admin());', t||'_admin', t);
   end loop;
 end $$;
 
 -- orders: แอดมินทั้งหมด / คนส่งเห็น+จัดการของตัวเอง
-create policy p_ord_admin  on orders for all using (is_admin()) with check (is_admin());
-create policy p_ord_drv_ro on orders for select using (delivery_id = auth.uid() or created_by = auth.uid());
+drop policy if exists p_ord_admin   on orders;
+create policy p_ord_admin   on orders for all using (is_admin()) with check (is_admin());
+drop policy if exists p_ord_drv_ro  on orders;
+create policy p_ord_drv_ro  on orders for select using (delivery_id = auth.uid() or created_by = auth.uid());
+drop policy if exists p_ord_drv_ins on orders;
 create policy p_ord_drv_ins on orders for insert with check (created_by = auth.uid());
+drop policy if exists p_ord_drv_upd on orders;
 create policy p_ord_drv_upd on orders for update using (delivery_id = auth.uid() or created_by = auth.uid());
 
 -- order_items: ตามสิทธิ์ของ order แม่
+drop policy if exists p_oi_admin on order_items;
 create policy p_oi_admin on order_items for all using (is_admin()) with check (is_admin());
-create policy p_oi_drv   on order_items for all
+drop policy if exists p_oi_drv on order_items;
+create policy p_oi_drv on order_items for all
   using (exists(select 1 from orders o where o.id = order_id and (o.delivery_id = auth.uid() or o.created_by = auth.uid())))
   with check (exists(select 1 from orders o where o.id = order_id and (o.delivery_id = auth.uid() or o.created_by = auth.uid())));
 
 -- payments: แอดมินเท่านั้น
+drop policy if exists p_pay_admin on payments;
 create policy p_pay_admin on payments for all using (is_admin()) with check (is_admin());
 
 -- driver_stock: แอดมินทั้งหมด / คนส่งอ่าน+แก้ของตัวเอง
+drop policy if exists p_ds_admin on driver_stock;
 create policy p_ds_admin on driver_stock for all using (is_admin()) with check (is_admin());
-create policy p_ds_drv   on driver_stock for all using (driver_id = auth.uid()) with check (driver_id = auth.uid());
+drop policy if exists p_ds_drv on driver_stock;
+create policy p_ds_drv on driver_stock for all using (driver_id = auth.uid()) with check (driver_id = auth.uid());
 
 -- claims: แอดมินอ่านทั้งหมด / คนส่งสร้าง+อ่านของตัวเอง
+drop policy if exists p_cl_admin on claims;
 create policy p_cl_admin on claims for all using (is_admin()) with check (is_admin());
+drop policy if exists p_cl_drv_ro on claims;
 create policy p_cl_drv_ro on claims for select using (driver_id = auth.uid());
+drop policy if exists p_cl_drv_ins on claims;
 create policy p_cl_drv_ins on claims for insert with check (driver_id = auth.uid());
+drop policy if exists p_cli_admin on claim_items;
 create policy p_cli_admin on claim_items for all using (is_admin()) with check (is_admin());
+drop policy if exists p_cli_drv on claim_items;
 create policy p_cli_drv on claim_items for all
   using (exists(select 1 from claims c where c.id = claim_id and c.driver_id = auth.uid()))
   with check (exists(select 1 from claims c where c.id = claim_id and c.driver_id = auth.uid()));
 
 -- schedule: แอดมินทั้งหมด / คนส่งเห็นของตัวเอง
+drop policy if exists p_sc_admin on schedule;
 create policy p_sc_admin on schedule for all using (is_admin()) with check (is_admin());
+drop policy if exists p_sc_drv on schedule;
 create policy p_sc_drv on schedule for select using (driver_id = auth.uid());
 
--- allocation_items readable by owner driver (นอกจากแอดมิน)
+-- allocations / allocation_items: คนส่งอ่านของตัวเอง (นอกจากแอดมิน)
+drop policy if exists p_ali_drv on allocation_items;
 create policy p_ali_drv on allocation_items for select
   using (exists(select 1 from allocations a where a.id = allocation_id and a.driver_id = auth.uid()));
+drop policy if exists p_al_drv on allocations;
 create policy p_al_drv on allocations for select using (driver_id = auth.uid());
+
+-- คนส่งเพิ่มลูกค้าใหม่ได้ (เหมือนเซลล์) — insert ได้ทั้งแอดมินและคนส่ง
+drop policy if exists customers_ins on customers;
+create policy customers_ins on customers for insert to authenticated with check (true);
+
+-- ============================================================
+--  RPC: สร้างออเดอร์ + ตัดสต๊อกแบบอะตอมมิก
+--  (คนส่งตัดจากสต๊อกบนรถ / แอดมินตัดจากคลังหลัก)
+-- ============================================================
+create or replace function create_order(
+  p_customer uuid,
+  p_delivery uuid,
+  p_pay_method pay_method,
+  p_slip text,
+  p_items jsonb   -- [{product_id, qty, sell_price, cost, name, unit}]
+) returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_role user_role;
+  v_by_delivery boolean;
+  v_status order_status;
+  v_pay_status pay_status;
+  v_delivery uuid;
+  v_code text;
+  v_total_sell numeric := 0;
+  v_total_cost numeric := 0;
+  v_order_id uuid;
+  it jsonb;
+  v_pid uuid; v_qty numeric; v_avail numeric;
+begin
+  select role into v_role from profiles where id = v_uid;
+  if v_role is null then raise exception 'ไม่พบโปรไฟล์ผู้ใช้'; end if;
+  v_by_delivery := (v_role = 'delivery');
+  v_status := case when v_by_delivery then 'DELIVERED' else 'CONFIRMED' end;
+  v_pay_status := case when p_pay_method = 'CREDIT' then 'UNPAID' else 'PAID' end;
+  v_delivery := case when v_by_delivery then v_uid else p_delivery end;
+
+  for it in select * from jsonb_array_elements(p_items) loop
+    v_pid := (it->>'product_id')::uuid;
+    v_qty := (it->>'qty')::numeric;
+    if v_by_delivery then
+      select qty into v_avail from driver_stock where driver_id = v_uid and product_id = v_pid;
+    else
+      select stock into v_avail from products where id = v_pid;
+    end if;
+    if coalesce(v_avail,0) < v_qty then
+      raise exception 'สต๊อกไม่พอ: %', coalesce(it->>'name','สินค้า');
+    end if;
+    v_total_sell := v_total_sell + (it->>'sell_price')::numeric * v_qty;
+    v_total_cost := v_total_cost + (it->>'cost')::numeric * v_qty;
+  end loop;
+
+  v_code := 'OD' || to_char(now(),'YYMMDD') || '-' || to_char(now(),'HH24MISS');
+
+  insert into orders(code, customer_id, delivery_id, created_by, status, pay_method,
+                     pay_status, slip_url, delivered_at, deliver_date, total_sell, total_cost)
+  values (v_code, p_customer, v_delivery, v_uid, v_status, p_pay_method, v_pay_status,
+          coalesce(p_slip,''), case when v_by_delivery then now() else null end,
+          current_date, v_total_sell, v_total_cost)
+  returning id into v_order_id;
+
+  for it in select * from jsonb_array_elements(p_items) loop
+    v_pid := (it->>'product_id')::uuid;
+    v_qty := (it->>'qty')::numeric;
+    insert into order_items(order_id, product_id, name, unit, qty, sell_price, cost)
+    values (v_order_id, v_pid, it->>'name', it->>'unit', v_qty,
+            (it->>'sell_price')::numeric, (it->>'cost')::numeric);
+    if v_by_delivery then
+      update driver_stock set qty = qty - v_qty where driver_id = v_uid and product_id = v_pid;
+    else
+      update products set stock = stock - v_qty where id = v_pid;
+    end if;
+  end loop;
+
+  return json_build_object('id', v_order_id, 'code', v_code, 'total_sell', v_total_sell);
+end $$;
+
+grant execute on function create_order(uuid, uuid, pay_method, text, jsonb) to authenticated;

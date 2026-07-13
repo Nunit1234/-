@@ -8,10 +8,16 @@ import type { Role } from '@/lib/types';
 const NAV: Record<Role, [string, string][]> = {
   admin: [
     ['/', '📊 แดชบอร์ด'],
+    ['/pos', '🧾 ขายสินค้า'],
+    ['/orders', '📋 ออเดอร์'],
     ['/products', '🥚 สินค้า & สต๊อก'],
     ['/customers', '👥 ลูกค้า & ราคา'],
   ],
-  delivery: [['/', '📊 หน้าหลัก']],
+  delivery: [
+    ['/', '📊 หน้าหลัก'],
+    ['/pos', '🧾 ขายสินค้า'],
+    ['/orders', '📋 ออเดอร์ของฉัน'],
+  ],
 };
 
 const ROLE_LABEL: Record<Role, string> = {
