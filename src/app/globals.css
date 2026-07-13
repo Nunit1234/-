@@ -74,3 +74,20 @@ main .shadow {
   border: 1px solid #e6ecdd;
   box-shadow: 0 1px 3px rgba(30, 45, 20, 0.08), 0 1px 2px rgba(30, 45, 20, 0.05);
 }
+
+/* ===== ตารางบนมือถือ: ไม่บีบตัวอักษร (เลื่อนแนวนอนแทน) ===== */
+@media (max-width: 640px) {
+  main table {
+    font-size: 13px;
+  }
+  main table th,
+  main table td {
+    padding-left: 0.55rem;
+    padding-right: 0.55rem;
+  }
+  /* cell ทั่วไปไม่ตัดบรรทัด (ยกเว้นที่ตั้ง whitespace-normal ไว้เอง เช่น ที่อยู่/หมายเหตุ) */
+  main table th:not(.whitespace-normal),
+  main table td:not(.whitespace-normal) {
+    white-space: nowrap;
+  }
+}

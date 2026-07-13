@@ -135,7 +135,7 @@ export default function ProductsClient({ initial }: { initial: Product[] }) {
           <thead className="bg-gray-50 text-gray-500">
             <tr>
               <th className="text-left p-3">สินค้า</th>
-              <th className="text-left p-3">ประเภท</th>
+              <th className="text-left p-3 hidden sm:table-cell">ประเภท</th>
               <th className="text-right p-3">ทุน</th>
               <th className="text-right p-3">ราคาขาย</th>
               <th className="text-right p-3">กำไร</th>
@@ -175,7 +175,7 @@ export default function ProductsClient({ initial }: { initial: Product[] }) {
                     </div>
                   </div>
                 </td>
-                <td className="p-3">{EGG_TYPES[p.type] || p.type}</td>
+                <td className="p-3 hidden sm:table-cell">{EGG_TYPES[p.type] || p.type}</td>
                 <td className="p-3 text-right">{money(p.cost)}</td>
                 <td className="p-3 text-right">{money(p.default_price)}</td>
                 <td className="p-3 text-right text-green-700">
