@@ -32,8 +32,13 @@ export default function LoginPage() {
         onSubmit={onSubmit}
         className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm"
       >
-        <div className="text-center text-5xl">🦆</div>
-        <h1 className="text-center text-2xl font-bold mt-2 text-green-900">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/logo.jpg"
+          alt="โลโก้"
+          className="w-24 h-24 rounded-full object-cover mx-auto shadow-lg"
+        />
+        <h1 className="text-center text-2xl font-bold mt-3 text-green-900">
           เจ้านายฟาร์มเป็ด
         </h1>
         <p className="text-center text-gray-500 text-sm mb-6">

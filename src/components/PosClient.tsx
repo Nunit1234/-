@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { uploadImage } from '@/lib/storage';
+import ImageUpload from '@/components/ImageUpload';
 import { type Customer, type Product, type Role } from '@/lib/types';
 import { money, fmtQty, unitInfo } from '@/lib/format';
 
@@ -93,16 +93,6 @@ export default function PosClient({
 
   function setQty(pid: string, q: number) {
     setCart((c) => ({ ...c, [pid]: Math.max(0, q) }));
-  }
-
-  async function onSlip(file: File) {
-    setSaving(true);
-    try {
-      setSlipUrl(await uploadImage(file, 'slips'));
-    } catch (e) {
-      setErr('อัปโหลดสลิปไม่สำเร็จ: ' + (e instanceof Error ? e.message : String(e)));
-    }
-    setSaving(false);
   }
 
   async function submit() {
@@ -343,16 +333,13 @@ export default function PosClient({
                   {settings.account_name && <div>ชื่อบัญชี: {settings.account_name}</div>}
                   {settings.account_no && <div>เลขบัญชี: {settings.account_no}</div>}
                 </div>
-                <label className="block text-xs text-gray-500 mt-2">แนบสลิปโอน *</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => e.target.files?.[0] && onSlip(e.target.files[0])}
+                <label className="block text-xs text-gray-500 mt-2 mb-1">แนบสลิปโอน *</label>
+                <ImageUpload
+                  value={slipUrl}
+                  onChange={setSlipUrl}
+                  folder="slips"
+                  label="แนบสลิป"
                 />
-                {slipUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={slipUrl} alt="slip" className="max-h-32 rounded mt-1" />
-                )}
               </div>
             )}
 

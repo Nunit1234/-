@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { uploadImage } from '@/lib/storage';
+import ImageUpload from '@/components/ImageUpload';
 
 type Settings = {
   id: number;
@@ -29,16 +29,6 @@ export default function SettingsClient({ initial }: { initial: Settings }) {
 
   function set<K extends keyof Settings>(k: K, v: Settings[K]) {
     setS((prev) => ({ ...prev, [k]: v }));
-  }
-
-  async function upload(k: 'qr_url' | 'receipt_logo_url', file: File) {
-    setSaving(true);
-    try {
-      set(k, await uploadImage(file, 'settings'));
-    } catch {
-      /* ignore */
-    }
-    setSaving(false);
   }
 
   async function save() {
@@ -85,6 +75,13 @@ export default function SettingsClient({ initial }: { initial: Settings }) {
         <input className={input} value={s.shop_address ?? ''} onChange={(e) => set('shop_address', e.target.value)} />
         <label className="text-xs text-gray-500">หมายเหตุท้ายบิล</label>
         <textarea className={input} rows={2} value={s.receipt_note ?? ''} onChange={(e) => set('receipt_note', e.target.value)} />
+        <label className="text-xs text-gray-500 block mb-1">โลโก้ในใบเสร็จ</label>
+        <ImageUpload
+          value={s.receipt_logo_url}
+          onChange={(url) => set('receipt_logo_url', url)}
+          folder="settings"
+          label="แนบโลโก้"
+        />
       </div>
 
       <div className="bg-white rounded-xl shadow p-4 mb-4">
@@ -101,12 +98,14 @@ export default function SettingsClient({ initial }: { initial: Settings }) {
         </div>
         <label className="text-xs text-gray-500">เลขที่บัญชี</label>
         <input className={input} value={s.account_no ?? ''} onChange={(e) => set('account_no', e.target.value)} />
-        <label className="text-xs text-gray-500">รูป QR รับเงิน</label>
-        <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && upload('qr_url', e.target.files[0])} />
-        {s.qr_url && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={s.qr_url} alt="QR" className="w-32 rounded mt-2 border" />
-        )}
+        <label className="text-xs text-gray-500 block mb-1">รูป QR รับเงิน</label>
+        <ImageUpload
+          value={s.qr_url}
+          onChange={(url) => set('qr_url', url)}
+          folder="settings"
+          size={120}
+          label="แนบ QR"
+        />
       </div>
 
       <div className="bg-white rounded-xl shadow p-4 mb-4">

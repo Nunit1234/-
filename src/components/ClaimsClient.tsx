@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { uploadImage } from '@/lib/storage';
+import ImageUpload from '@/components/ImageUpload';
 import { fmtQty } from '@/lib/format';
 import type { Role } from '@/lib/types';
 
@@ -54,16 +54,6 @@ export default function ClaimsClient({
     (c.claim_items ?? [])
       .map((i) => `${i.name} (${i.unit}) ×${fmtQty(i.qty)}`)
       .join(', ');
-
-  async function onPhoto(file: File) {
-    setSaving(true);
-    try {
-      setPhoto(await uploadImage(file, 'claims'));
-    } catch {
-      /* ignore */
-    }
-    setSaving(false);
-  }
 
   async function submit() {
     if (!customerId) {
@@ -264,16 +254,8 @@ export default function ClaimsClient({
               placeholder="เช่น ไข่แตกระหว่างขนส่ง"
             />
 
-            <label className="block text-xs text-gray-500">📸 รูปหลักฐาน</label>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => e.target.files?.[0] && onPhoto(e.target.files[0])}
-            />
-            {photo && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={photo} alt="" className="max-h-32 rounded mt-1" />
-            )}
+            <label className="block text-xs text-gray-500 mb-1">📸 รูปหลักฐาน</label>
+            <ImageUpload value={photo} onChange={setPhoto} folder="claims" label="แนบรูป" />
 
             {err && <p className="text-red-600 text-sm mt-1">{err}</p>}
             <div className="flex justify-end gap-2 mt-3">

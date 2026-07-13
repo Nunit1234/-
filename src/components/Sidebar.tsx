@@ -58,7 +58,9 @@ export default function Sidebar({
         <button onClick={() => setOpen(true)} className="text-2xl leading-none">
           ☰
         </button>
-        <span className="font-bold">🦆 เจ้านายฟาร์มเป็ด</span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.jpg" alt="" className="w-8 h-8 rounded-full object-cover" />
+        <span className="font-bold">เจ้านายฟาร์มเป็ด</span>
       </div>
 
       {/* Scrim (มือถือ) */}
@@ -76,8 +78,10 @@ export default function Sidebar({
           open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
       >
-        <div className="px-4 py-4 font-bold text-lg border-b border-white/10">
-          🦆 เจ้านายฟาร์มเป็ด
+        <div className="px-4 py-4 font-bold text-lg border-b border-white/10 flex items-center gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.jpg" alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+          <span>เจ้านายฟาร์มเป็ด</span>
         </div>
         <nav className="flex-1 p-2 overflow-auto">
           {links.map(([href, label]) => {

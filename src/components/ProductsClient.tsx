@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { uploadImage } from '@/lib/storage';
+import ImageUpload from '@/components/ImageUpload';
 import { EGG_TYPES, UNIT_PER, type Product } from '@/lib/types';
 import { money, fmtQty, unitInfo } from '@/lib/format';
 
@@ -75,18 +75,6 @@ export default function ProductsClient({ initial }: { initial: Product[] }) {
     }
     setForm(null);
     await reload();
-  }
-
-  async function onImage(file: File) {
-    setSaving(true);
-    setErr('');
-    try {
-      const url = await uploadImage(file, 'products');
-      setForm((f) => (f ? { ...f, image_url: url } : f));
-    } catch (e) {
-      setErr('อัปโหลดรูปไม่สำเร็จ: ' + (e instanceof Error ? e.message : String(e)));
-    }
-    setSaving(false);
   }
 
   return (
@@ -310,19 +298,13 @@ export default function ProductsClient({ initial }: { initial: Product[] }) {
             </div>
 
             <Field label="รูปสินค้า">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => e.target.files?.[0] && onImage(e.target.files[0])}
-              />
-              {form.image_url && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={form.image_url}
-                  alt=""
-                  className="w-20 h-20 object-cover rounded mt-2"
+              <div className="mt-1">
+                <ImageUpload
+                  value={form.image_url}
+                  onChange={(url) => setForm({ ...form, image_url: url })}
+                  folder="products"
                 />
-              )}
+              </div>
             </Field>
 
             {form.id && (

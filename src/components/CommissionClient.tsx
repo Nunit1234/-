@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { uploadImage } from '@/lib/storage';
+import ImageUpload from '@/components/ImageUpload';
 import { money } from '@/lib/format';
 
 type OrderRow = {
@@ -60,16 +60,6 @@ export default function CommissionClient({
   );
   const totalPending = pending.reduce((s, g) => s + g.panels * rate, 0);
   const paidTotal = commissions.reduce((s, c) => s + c.amount, 0);
-
-  async function onProof(file: File) {
-    setSaving(true);
-    try {
-      setProof(await uploadImage(file, 'commissions'));
-    } catch {
-      /* ignore */
-    }
-    setSaving(false);
-  }
 
   async function pay() {
     if (!payGroup) return;
@@ -208,16 +198,8 @@ export default function CommissionClient({
               วันที่ {payGroup.dateKey} • {payGroup.panels} แผง ×{rate} ={' '}
               <b className="text-green-700">{money(payGroup.panels * rate)}</b>
             </p>
-            <label className="text-xs text-gray-500">แนบสลิปโอนให้คนส่ง</label>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => e.target.files?.[0] && onProof(e.target.files[0])}
-            />
-            {proof && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={proof} alt="" className="max-h-32 rounded mt-1" />
-            )}
+            <label className="text-xs text-gray-500 block mb-1">แนบสลิปโอนให้คนส่ง</label>
+            <ImageUpload value={proof} onChange={setProof} folder="commissions" label="แนบสลิป" />
             <div className="flex justify-end gap-2 mt-3">
               <button
                 className="px-4 py-2 rounded-lg bg-gray-100"

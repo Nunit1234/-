@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { uploadImage } from '@/lib/storage';
+import ImageUpload from '@/components/ImageUpload';
 import { money } from '@/lib/format';
 
 type DOrder = {
@@ -37,16 +37,6 @@ export default function DeliveryClient({ orders }: { orders: DOrder[] }) {
     await supabase.from('orders').update({ status: 'DELIVERING' }).eq('id', o.id);
     setBusy('');
     router.refresh();
-  }
-
-  async function onProof(file: File) {
-    setBusy('upload');
-    try {
-      setProofUrl(await uploadImage(file, 'proofs'));
-    } catch {
-      /* ignore */
-    }
-    setBusy('');
   }
 
   async function complete() {
@@ -162,15 +152,7 @@ export default function DeliveryClient({ orders }: { orders: DOrder[] }) {
           >
             <h2 className="text-lg font-bold mb-1">ยืนยันการส่งสำเร็จ</h2>
             <p className="text-sm text-gray-500 mb-2">📸 แนบรูปหลักฐานการส่ง</p>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => e.target.files?.[0] && onProof(e.target.files[0])}
-            />
-            {proofUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={proofUrl} alt="" className="max-h-40 rounded mt-2" />
-            )}
+            <ImageUpload value={proofUrl} onChange={setProofUrl} folder="proofs" label="แนบรูปหลักฐาน" />
             <input
               className="w-full border rounded-lg px-3 py-2 mt-2"
               placeholder="ผู้รับ / หมายเหตุ (ถ้ามี)"
