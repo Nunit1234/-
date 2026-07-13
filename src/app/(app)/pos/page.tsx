@@ -2,7 +2,12 @@ import { createClient } from '@/lib/supabase/server';
 import PosClient from '@/components/PosClient';
 import type { Customer, Product, Role } from '@/lib/types';
 
-export default async function PosPage() {
+export default async function PosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ customer?: string; sched?: string }>;
+}) {
+  const sp = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -50,6 +55,8 @@ export default async function PosPage() {
       drivers={drivers}
       driverStock={driverStock}
       settings={settings ?? {}}
+      initialCustomerId={sp.customer}
+      schedId={sp.sched}
     />
   );
 }

@@ -298,6 +298,8 @@ drop policy if exists p_sc_admin on schedule;
 create policy p_sc_admin on schedule for all using (is_admin()) with check (is_admin());
 drop policy if exists p_sc_drv on schedule;
 create policy p_sc_drv on schedule for select using (driver_id = auth.uid());
+drop policy if exists p_sc_drv_upd on schedule;
+create policy p_sc_drv_upd on schedule for update using (driver_id = auth.uid()) with check (driver_id = auth.uid());
 
 -- allocations / allocation_items: คนส่งอ่านของตัวเอง (นอกจากแอดมิน)
 drop policy if exists p_ali_drv on allocation_items;

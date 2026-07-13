@@ -27,6 +27,8 @@ export default function PosClient({
   drivers,
   driverStock,
   settings,
+  initialCustomerId,
+  schedId,
 }: {
   role: Role;
   products: Product[];
@@ -34,12 +36,16 @@ export default function PosClient({
   drivers: { id: string; name: string }[];
   driverStock: Record<string, number>;
   settings: SettingsLite;
+  initialCustomerId?: string;
+  schedId?: string;
 }) {
   const supabase = createClient();
   const router = useRouter();
   const isAdmin = role === 'admin';
 
-  const [customerId, setCustomerId] = useState(customers[0]?.id ?? '');
+  const [customerId, setCustomerId] = useState(
+    initialCustomerId || customers[0]?.id || ''
+  );
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [cart, setCart] = useState<Record<string, number>>({});
   const [payMethod, setPayMethod] = useState('CASH');
@@ -135,6 +141,10 @@ export default function PosClient({
       return;
     }
     setDoneCode(data?.code ?? 'สำเร็จ');
+    // ผูกออเดอร์กลับเข้าคิวจัดส่ง (ถ้าเปิดบิลจากคิว)
+    if (schedId && data?.id) {
+      await supabase.from('schedule').update({ order_id: data.id }).eq('id', schedId);
+    }
     setCart({});
     setSlipUrl('');
     setPayMethod('CASH');
