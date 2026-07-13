@@ -15,6 +15,10 @@ const NAV: Record<Role, [string, string][]> = {
     ['/vanstock', '📦 สต๊อกคนส่ง'],
     ['/claims', '♻️ เคลมสินค้า'],
     ['/customers', '👥 ลูกค้า & ราคา'],
+    ['/commission', '🧮 ค่าคอมมิชชั่น'],
+    ['/expenses', '📒 บัญชี & งบกำไรขาดทุน'],
+    ['/daily', '💵 ปิดยอดรายวัน'],
+    ['/settings', '⚙️ ตั้งค่าร้าน'],
   ],
   delivery: [
     ['/', '📊 หน้าหลัก'],
@@ -24,6 +28,7 @@ const NAV: Record<Role, [string, string][]> = {
     ['/delivery', '🚚 งานส่งของฉัน'],
     ['/claims', '♻️ เคลมสินค้า'],
     ['/orders', '📋 ออเดอร์ของฉัน'],
+    ['/daily', '💵 ปิดยอดวันนี้'],
   ],
 };
 
