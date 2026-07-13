@@ -18,6 +18,7 @@ const NAV: Record<Role, [string, string][]> = {
     ['/commission', '🧮 ค่าคอมมิชชั่น'],
     ['/expenses', '📒 บัญชี & งบกำไรขาดทุน'],
     ['/daily', '💵 ปิดยอดรายวัน'],
+    ['/team', '👤 จัดการผู้ใช้'],
     ['/settings', '⚙️ ตั้งค่าร้าน'],
   ],
   delivery: [
