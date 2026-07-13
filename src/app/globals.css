@@ -1,11 +1,25 @@
 @import "tailwindcss";
 
+/* ===== ธีมสีจากต้นแบบ (เจ้านายฟาร์มเป็ด) — remap สเกลสีเขียวทั้งหมด ===== */
+@theme {
+  --color-green-50: #eef6e4;
+  --color-green-100: #dceccb;
+  --color-green-200: #c6e1a9;
+  --color-green-300: #a6cf7f;
+  --color-green-400: #7cb84e;
+  --color-green-500: #4a8b2c;
+  --color-green-600: #438025;
+  --color-green-700: #3a6f20;
+  --color-green-800: #2f571a;
+  --color-green-900: #243f12;
+}
+
 html,
 body {
-  background: #f0fdf4;
+  background: #eef6e4;
 }
 
 body {
-  color: #171717;
+  color: #1e2b16;
   font-family: 'Segoe UI', Tahoma, 'Leelawadee UI', Arial, sans-serif;
 }
