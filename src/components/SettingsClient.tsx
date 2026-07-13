@@ -26,6 +26,17 @@ export default function SettingsClient({ initial }: { initial: Settings }) {
   const [s, setS] = useState<Settings>(initial);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
+  const [tg, setTg] = useState('');
+
+  async function testTelegram() {
+    setTg('กำลังส่ง…');
+    const { error } = await supabase.rpc('send_daily_report');
+    setTg(
+      error
+        ? 'ส่งไม่สำเร็จ: ' + error.message + ' (ตั้งค่า Telegram ใน Supabase ก่อนไหม?)'
+        : 'ส่งแล้ว ✔ เช็คใน Telegram ได้เลย'
+    );
+  }
 
   function set<K extends keyof Settings>(k: K, v: Settings[K]) {
     setS((prev) => ({ ...prev, [k]: v }));
@@ -166,6 +177,22 @@ export default function SettingsClient({ initial }: { initial: Settings }) {
           value={s.commission_rate ?? 0.3}
           onChange={(e) => set('commission_rate', Number(e.target.value))}
         />
+      </div>
+
+      <div className="bg-white rounded-xl shadow p-4 mb-4">
+        <h3 className="font-bold mb-2">🔔 แจ้งเตือน Telegram</h3>
+        <p className="text-xs text-gray-500 mb-3">
+          ระบบส่งสรุปประจำวัน (ยอดขาย/กำไร/สต๊อก/เคลม) เข้า Telegram ทุกเที่ยงคืนอัตโนมัติ
+          — ตั้งค่าบอทได้ในไฟล์ <code>telegram-daily-report.sql</code>
+        </p>
+        <button
+          type="button"
+          onClick={testTelegram}
+          className="bg-green-100 text-green-800 hover:bg-green-200 px-4 py-2 rounded-lg text-sm font-medium"
+        >
+          📨 ทดสอบส่งแจ้งเตือนตอนนี้
+        </button>
+        {tg && <p className="text-sm mt-2 text-gray-700">{tg}</p>}
       </div>
 
       {msg && <p className="text-green-700 text-sm mb-2">{msg}</p>}

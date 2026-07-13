@@ -1,13 +1,11 @@
 -- ============================================================
---  แจ้งสรุปยอดขายเข้า Telegram ทุกเที่ยงคืน (เวลาไทย)
+--  แจ้งสรุปประจำวันเข้า Telegram ทุกเที่ยงคืน (เวลาไทย)
 --  รันใน Supabase → SQL Editor  (แก้ BOT_TOKEN และ CHAT_ID ก่อน)
 -- ============================================================
 
--- 1) เปิด extension ที่ต้องใช้
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
 
--- 2) ฟังก์ชันสร้าง+ส่งสรุปยอดขายของ "วันที่เพิ่งจบ" (เวลาไทย) เข้า Telegram
 create or replace function send_daily_report() returns void
 language plpgsql security definer set search_path = public as $$
 declare
@@ -19,8 +17,11 @@ declare
   rpt_date date := (now() at time zone 'Asia/Bangkok')::date - 1;
   v_sales numeric; v_cost numeric; v_bills int;
   v_cash numeric; v_transfer numeric; v_credit numeric; v_unpaid numeric;
+  v_types int; v_stock numeric; v_low int;
+  v_claim_cnt int; v_claim_qty numeric;
   msg text;
 begin
+  -- ยอดขายของวันที่รายงาน
   select coalesce(sum(total_sell),0), coalesce(sum(total_cost),0), count(*),
          coalesce(sum(total_sell) filter (where pay_method='CASH'),0),
          coalesce(sum(total_sell) filter (where pay_method='TRANSFER'),0),
@@ -31,16 +32,32 @@ begin
     where status <> 'CANCELLED'
       and (created_at at time zone 'Asia/Bangkok')::date = rpt_date;
 
-  msg := '📊 สรุปยอดขาย ' || to_char(rpt_date,'DD/MM/YYYY') || E'\n'
+  -- สต๊อกคงเหลือ / ชนิดสินค้า
+  select count(*), coalesce(sum(stock),0), count(*) filter (where stock <= 15)
+    into v_types, v_stock, v_low
+    from products where active;
+
+  -- เคลมของวันที่รายงาน
+  select count(distinct c.id), coalesce(sum(ci.qty),0)
+    into v_claim_cnt, v_claim_qty
+    from claims c
+    left join claim_items ci on ci.claim_id = c.id
+    where (c.created_at at time zone 'Asia/Bangkok')::date = rpt_date;
+
+  msg := '📊 สรุปประจำวัน ' || to_char(rpt_date,'DD/MM/YYYY') || E'\n'
       || '━━━━━━━━━━━━' || E'\n'
       || '💰 ยอดขาย: ' || to_char(v_sales,'FM999,999,990.00') || ' ฿' || E'\n'
       || '📈 กำไร: ' || to_char(v_sales - v_cost,'FM999,999,990.00') || ' ฿' || E'\n'
       || '🧾 จำนวนบิล: ' || v_bills || E'\n'
+      || '💵 สด ' || to_char(v_cash,'FM999,990') || '  📲 โอน ' || to_char(v_transfer,'FM999,990') || '  📝 เชื่อ ' || to_char(v_credit,'FM999,990') || E'\n'
+      || '⚠️ ค้างชำระ: ' || to_char(v_unpaid,'FM999,999,990.00') || ' ฿' || E'\n'
       || '━━━━━━━━━━━━' || E'\n'
-      || '💵 เงินสด: ' || to_char(v_cash,'FM999,999,990.00') || E'\n'
-      || '📲 โอน: ' || to_char(v_transfer,'FM999,999,990.00') || E'\n'
-      || '📝 เครดิต: ' || to_char(v_credit,'FM999,999,990.00') || E'\n'
-      || '⚠️ ค้างชำระ: ' || to_char(v_unpaid,'FM999,999,990.00') || ' ฿';
+      || '📦 สต๊อกคงเหลือ' || E'\n'
+      || '• ชนิดสินค้า: ' || v_types || ' รายการ' || E'\n'
+      || '• สต๊อกรวม: ' || to_char(v_stock,'FM999,999,990.##') || ' หน่วย' || E'\n'
+      || '• ใกล้หมด (≤15): ' || v_low || ' รายการ' || E'\n'
+      || '━━━━━━━━━━━━' || E'\n'
+      || '♻️ เคลมวันนี้: ' || v_claim_cnt || ' ครั้ง (รวม ' || to_char(v_claim_qty,'FM999,990.##') || ' หน่วย)';
 
   perform net.http_post(
     url := 'https://api.telegram.org/bot' || bot_token || '/sendMessage',
@@ -49,14 +66,13 @@ begin
   );
 end $$;
 
--- 3) ตั้งเวลายิงทุกวัน เที่ยงคืนเวลาไทย (= 17:00 UTC)
+-- ให้ปุ่ม "ทดสอบ" ในแอปเรียกได้
+grant execute on function send_daily_report() to authenticated;
+
+-- ตั้งเวลายิงทุกวัน เที่ยงคืนเวลาไทย (= 17:00 UTC)
 select cron.unschedule('daily-telegram-report')
   where exists (select 1 from cron.job where jobname = 'daily-telegram-report');
 select cron.schedule('daily-telegram-report', '0 17 * * *', $$ select send_daily_report(); $$);
 
--- ============================================================
---  ทดสอบส่งทันที (รันบรรทัดล่างหลังแก้ token/chat_id แล้ว):
---    select send_daily_report();
---  ยกเลิกการแจ้งเตือน:
---    select cron.unschedule('daily-telegram-report');
--- ============================================================
+-- ทดสอบทันที:  select send_daily_report();
+-- ยกเลิก:      select cron.unschedule('daily-telegram-report');
