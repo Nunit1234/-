@@ -13,8 +13,21 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL || "https://farm-duck-web-production.up.railway.app"
+  ),
   title: "เจ้านายฟาร์มเป็ด — ระบบ POS ล้งไข่",
-  description: "ระบบ POS & สต๊อก ล้งไข่",
+  description: "ระบบ POS & สต๊อก ล้งไข่ เจ้านายฟาร์มเป็ด (FARM DUCK)",
+  openGraph: {
+    title: "เจ้านายฟาร์มเป็ด (FARM DUCK)",
+    description: "ระบบ POS & สต๊อก ล้งไข่",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "เจ้านายฟาร์มเป็ด (FARM DUCK)",
+    description: "ระบบ POS & สต๊อก ล้งไข่",
+  },
 };
 
 export default function RootLayout({
