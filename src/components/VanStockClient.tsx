@@ -32,6 +32,31 @@ export default function VanStockClient({
   const [qtys, setQtys] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  const [editRow, setEditRow] = useState<StockRow | null>(null);
+  const [editQty, setEditQty] = useState('');
+
+  async function saveEdit() {
+    if (!editRow) return;
+    setSaving(true);
+    await supabase
+      .from('driver_stock')
+      .update({ qty: Number(editQty) || 0 })
+      .eq('driver_id', editRow.driver_id)
+      .eq('product_id', editRow.product_id);
+    setSaving(false);
+    setEditRow(null);
+    router.refresh();
+  }
+
+  async function delRow(s: StockRow) {
+    if (!confirm(`ลบ "${s.products?.name}" ออกจากสต๊อกบนรถของคนส่ง?`)) return;
+    await supabase
+      .from('driver_stock')
+      .delete()
+      .eq('driver_id', s.driver_id)
+      .eq('product_id', s.product_id);
+    router.refresh();
+  }
 
   function printSheet(driverName: string, items: AllocItem[]) {
     const rows = items
@@ -135,11 +160,30 @@ export default function VanStockClient({
                         {fmtQty(s.qty)} {s.products?.unit ?? ''}
                       </span>
                     </td>
+                    <td className="p-2 text-right whitespace-nowrap">
+                      <button
+                        onClick={() => {
+                          setEditRow(s);
+                          setEditQty(String(s.qty));
+                        }}
+                        className="text-green-700 hover:underline mr-3"
+                      >
+                        แก้ไข
+                      </button>
+                      <button
+                        onClick={() => delRow(s)}
+                        className="text-red-500 hover:underline"
+                      >
+                        ลบ
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {rows.length === 0 && (
                   <tr>
-                    <td className="p-3 text-center text-gray-400">ยังไม่มีสต๊อก</td>
+                    <td colSpan={3} className="p-3 text-center text-gray-400">
+                      ยังไม่มีสต๊อก
+                    </td>
                   </tr>
                 )}
               </tbody>
@@ -147,6 +191,48 @@ export default function VanStockClient({
           </div>
         );
       })}
+
+      {/* Edit stock modal */}
+      {editRow && (
+        <div
+          className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center p-4 overflow-auto"
+          onClick={() => !saving && setEditRow(null)}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-xs p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold mb-2">
+              แก้ไขสต๊อก — {editRow.products?.name}
+            </h2>
+            <label className="text-xs text-gray-500">
+              จำนวน ({editRow.products?.unit})
+            </label>
+            <input
+              type="number"
+              className="w-full border rounded-lg px-3 py-2 mb-3"
+              value={editQty}
+              onChange={(e) => setEditQty(e.target.value)}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                className="px-4 py-2 rounded-lg bg-gray-100"
+                onClick={() => setEditRow(null)}
+                disabled={saving}
+              >
+                ยกเลิก
+              </button>
+              <button
+                className="px-4 py-2 rounded-lg bg-green-700 text-white"
+                onClick={saveEdit}
+                disabled={saving}
+              >
+                {saving ? 'กำลังบันทึก…' : 'บันทึก'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Allocate modal */}
       {allocDriver && (
