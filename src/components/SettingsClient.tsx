@@ -42,6 +42,47 @@ export default function SettingsClient({ initial }: { initial: Settings }) {
     router.refresh();
   }
 
+  function previewReceipt() {
+    const pw = s.receipt_width || '80mm';
+    const W = ({ '58mm': 200, '80mm': 300, A4: 480 } as Record<string, number>)[pw] || 300;
+    const logo = s.receipt_logo_url || '';
+    const items = [
+      { name: 'ไข่เป็ด เบอร์ 00', unit: 'แผง', qty: 2, price: 150 },
+      { name: 'ไข่ไก่ เบอร์ 0', unit: 'แผง', qty: 3, price: 116 },
+    ];
+    const rows = items
+      .map(
+        (i) =>
+          `<tr><td>${i.name}<br><span style="color:#888;font-size:11px">${i.unit}</span></td><td style="text-align:center">${i.qty}</td><td style="text-align:right">${i.price.toFixed(2)}</td><td style="text-align:right">${(i.price * i.qty).toFixed(2)}</td></tr>`
+      )
+      .join('');
+    const total = items.reduce((a, i) => a + i.price * i.qty, 0);
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>ตัวอย่างใบเสร็จ</title>
+      <style>${pw !== 'A4' ? `@page{size:${pw} auto;margin:3mm}` : ''}
+      *{font-family:Tahoma,sans-serif}body{max-width:${W}px;margin:auto;padding:10px;color:#000;font-size:13px}
+      h2{text-align:center;margin:2px 0}.c{text-align:center}.muted{color:#555;font-size:12px}
+      .logo{width:70px;height:70px;object-fit:contain;filter:grayscale(1);display:block;margin:0 auto 4px}
+      table{width:100%;border-collapse:collapse;margin-top:8px}td,th{padding:4px 2px;border-bottom:1px dashed #bbb}
+      th{text-align:left;border-bottom:1px solid #000}.tot{font-weight:bold;font-size:15px;border-top:2px solid #000}
+      @media print{button{display:none}}</style></head><body>
+      ${logo ? `<img class="logo" src="${logo}">` : ''}
+      <h2>${s.shop_name || 'เจ้านายฟาร์มเป็ด'}</h2>
+      ${s.shop_address ? `<div class="c muted">${s.shop_address}</div>` : ''}
+      ${s.shop_phone ? `<div class="c muted">โทร. ${s.shop_phone}</div>` : ''}
+      <div class="c muted">ใบเสร็จรับเงิน / บิลขายสินค้า</div>
+      <div class="muted" style="margin-top:6px">เลขที่: (ตัวอย่าง)<br>ลูกค้า: ร้านตัวอย่าง</div>
+      <table><thead><tr><th>รายการ</th><th class="c">จำนวน</th><th style="text-align:right">ราคา</th><th style="text-align:right">รวม</th></tr></thead><tbody>${rows}</tbody></table>
+      <table><tr class="tot"><td>รวมทั้งสิ้น</td><td style="text-align:right">${total.toFixed(2)} บาท</td></tr></table>
+      ${s.receipt_note ? `<div class="c muted" style="margin-top:12px">${s.receipt_note}</div>` : ''}
+      <div class="c" style="margin-top:12px"><button onclick="window.print()" style="padding:8px 20px">🖨️ พิมพ์</button></div>
+      </body></html>`;
+    const w = window.open('', '_blank', 'width=380,height=640');
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+    }
+  }
+
   const input =
     'w-full border border-gray-300 rounded-lg px-3 py-2 mb-2';
 
@@ -82,6 +123,13 @@ export default function SettingsClient({ initial }: { initial: Settings }) {
           folder="settings"
           label="แนบโลโก้"
         />
+        <button
+          type="button"
+          onClick={previewReceipt}
+          className="mt-3 bg-green-100 text-green-800 hover:bg-green-200 px-4 py-2 rounded-lg text-sm font-medium"
+        >
+          👁️ ดูตัวอย่างใบเสร็จ
+        </button>
       </div>
 
       <div className="bg-white rounded-xl shadow p-4 mb-4">

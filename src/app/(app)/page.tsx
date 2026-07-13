@@ -19,12 +19,21 @@ export default async function Home() {
     redirect('/delivery');
   }
 
-  const { data: lowStock } = await supabase
-    .from('products')
-    .select('name, unit, stock')
-    .eq('active', true)
-    .lte('stock', 15)
-    .order('stock');
+  const [{ data: lowStock }, { data: settings }] = await Promise.all([
+    supabase
+      .from('products')
+      .select('name, unit, stock')
+      .eq('active', true)
+      .lte('stock', 15)
+      .order('stock'),
+    supabase.from('settings').select('shop_name, shop_phone').eq('id', 1).single(),
+  ]);
 
-  return <DashboardClient name={profile?.name || ''} lowStock={lowStock ?? []} />;
+  return (
+    <DashboardClient
+      name={profile?.name || ''}
+      lowStock={lowStock ?? []}
+      settings={settings ?? {}}
+    />
+  );
 }

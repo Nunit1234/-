@@ -38,7 +38,7 @@ export default async function OrdersPage() {
 
   const { data: settings } = await supabase
     .from('settings')
-    .select('shop_name, shop_phone, shop_address, receipt_note')
+    .select('shop_name, shop_phone, shop_address, receipt_note, receipt_logo_url, receipt_width')
     .eq('id', 1)
     .single();
 

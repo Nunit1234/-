@@ -24,6 +24,15 @@ body {
   font-family: 'Segoe UI', Tahoma, 'Leelawadee UI', Arial, sans-serif;
 }
 
+/* Tailwind v4: border เริ่มต้นเป็น currentColor (ดำ) — ตั้งเป็นเทาอ่อนแบบต้นแบบ */
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: #dfe6d4;
+  }
+}
+
 /* จัดเนื้อหาแต่ละหน้าให้อยู่กึ่งกลาง (สมดุลบนจอกว้าง ไม่ชิดซ้าย) */
 main > div {
   margin-inline: auto;

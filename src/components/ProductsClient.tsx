@@ -77,19 +77,57 @@ export default function ProductsClient({ initial }: { initial: Product[] }) {
     await reload();
   }
 
+  function printStock() {
+    let totVal = 0;
+    const rows = items
+      .map((p) => {
+        const val = Number(p.stock) * Number(p.cost);
+        totVal += val;
+        return `<tr><td>${p.name}<br><span style="color:#888;font-size:11px">${unitInfo(p.unit, p.per_unit)}</span></td><td style="text-align:right">${fmtQty(p.stock)}</td><td style="text-align:right">${Number(p.cost).toFixed(2)}</td><td style="text-align:right">${val.toFixed(2)}</td></tr>`;
+      })
+      .join('');
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>ใบสรุปสต๊อก</title>
+      <style>*{font-family:Tahoma,sans-serif}body{max-width:640px;margin:auto;padding:16px;color:#000;font-size:13px}
+      h2{text-align:center;margin:2px 0}h3{text-align:center;font-size:15px}
+      table{width:100%;border-collapse:collapse;margin-top:8px;font-size:12.5px}td,th{padding:5px 4px;border-bottom:1px solid #ddd}
+      th{text-align:left;background:#f0f0f0}.big td{border-top:2px solid #000;font-weight:bold}
+      .sign{display:flex;gap:16px;margin-top:40px}.sign div{flex:1;text-align:center}.ln{border-top:1px dotted #000;margin-top:30px;margin-bottom:4px}
+      @media print{button{display:none}}</style></head><body>
+      <h2>เจ้านายฟาร์มเป็ด</h2><h3>ใบสรุปสต๊อกคงเหลือ (คลังหลัก)</h3>
+      <div style="text-align:center;color:#555">พิมพ์ ${new Date().toLocaleString('th-TH')}</div>
+      <table><thead><tr><th>สินค้า</th><th style="text-align:right">คงเหลือ</th><th style="text-align:right">ทุน/หน่วย</th><th style="text-align:right">มูลค่า</th></tr></thead>
+      <tbody>${rows}<tr class="big"><td colspan="3">มูลค่าสต๊อกรวม</td><td style="text-align:right">${totVal.toFixed(2)}</td></tr></tbody></table>
+      <div class="sign"><div><div class="ln"></div>ผู้ตรวจนับ</div><div><div class="ln"></div>ผู้อนุมัติ</div></div>
+      <div style="text-align:center;margin-top:14px"><button onclick="window.print()" style="padding:8px 20px">🖨️ พิมพ์</button></div>
+      </body></html>`;
+    const w = window.open('', '_blank', 'width=560,height=740');
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+    }
+  }
+
   return (
     <div className="p-4 md:p-6 max-w-5xl">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <h1 className="text-xl md:text-2xl font-bold text-green-900">สินค้า &amp; สต๊อก</h1>
-        <button
-          onClick={() => {
-            setErr('');
-            setForm({ ...EMPTY });
-          }}
-          className="bg-green-700 hover:bg-green-800 text-white px-4 py-2 rounded-lg text-sm font-semibold"
-        >
-          + เพิ่มสินค้า
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={printStock}
+            className="bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-lg text-sm"
+          >
+            🖨️ ใบสต๊อก
+          </button>
+          <button
+            onClick={() => {
+              setErr('');
+              setForm({ ...EMPTY });
+            }}
+            className="bg-green-700 hover:bg-green-800 text-white px-4 py-2 rounded-lg text-sm font-semibold"
+          >
+            + เพิ่มสินค้า
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow overflow-x-auto">

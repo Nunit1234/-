@@ -45,6 +45,8 @@ type ShopSettings = {
   shop_phone?: string;
   shop_address?: string;
   receipt_note?: string;
+  receipt_logo_url?: string;
+  receipt_width?: string;
 };
 
 export default function OrdersClient({
@@ -71,12 +73,18 @@ export default function OrdersClient({
           `<tr><td>${i.name}<br><span style="color:#888;font-size:11px">${i.unit}</span></td><td style="text-align:center">${i.qty}</td><td style="text-align:right">${i.sell_price.toFixed(2)}</td><td style="text-align:right">${(i.sell_price * i.qty).toFixed(2)}</td></tr>`
       )
       .join('');
+    const pw = settings.receipt_width || '80mm';
+    const W = ({ '58mm': 200, '80mm': 300, A4: 480 } as Record<string, number>)[pw] || 300;
+    const logo = settings.receipt_logo_url || '';
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>บิล ${o.code}</title>
-      <style>*{font-family:Tahoma,sans-serif}body{max-width:320px;margin:auto;padding:10px;color:#000;font-size:13px}
+      <style>${pw !== 'A4' ? `@page{size:${pw} auto;margin:3mm}` : ''}
+      *{font-family:Tahoma,sans-serif}body{max-width:${W}px;margin:auto;padding:10px;color:#000;font-size:13px}
       h2{text-align:center;margin:2px 0}.c{text-align:center}.muted{color:#555;font-size:12px}
+      .logo{width:70px;height:70px;object-fit:contain;filter:grayscale(1);display:block;margin:0 auto 4px}
       table{width:100%;border-collapse:collapse;margin-top:8px}td,th{padding:4px 2px;border-bottom:1px dashed #bbb}
       th{text-align:left;border-bottom:1px solid #000}.tot{font-weight:bold;font-size:15px;border-top:2px solid #000}
       @media print{button{display:none}}</style></head><body>
+      ${logo ? `<img class="logo" src="${logo}">` : ''}
       <h2>${settings.shop_name || 'เจ้านายฟาร์มเป็ด'}</h2>
       ${settings.shop_address ? `<div class="c muted">${settings.shop_address}</div>` : ''}
       ${settings.shop_phone ? `<div class="c muted">โทร. ${settings.shop_phone}</div>` : ''}
@@ -100,6 +108,21 @@ export default function OrdersClient({
   const [status, setStatus] = useState('');
   const [delivery, setDelivery] = useState('');
   const [saving, setSaving] = useState(false);
+  const [qSearch, setQSearch] = useState('');
+  const [qStatus, setQStatus] = useState('');
+
+  const filtered = orders.filter((o) => {
+    if (qStatus && o.status !== qStatus) return false;
+    if (qSearch.trim()) {
+      const s = qSearch.trim().toLowerCase();
+      if (
+        !o.code.toLowerCase().includes(s) &&
+        !(o.customers?.name ?? '').toLowerCase().includes(s)
+      )
+        return false;
+    }
+    return true;
+  });
 
   async function openOrder(o: OrderRow) {
     setOpen(o);
@@ -140,6 +163,27 @@ export default function OrdersClient({
         {isAdmin ? 'ออเดอร์' : 'ออเดอร์ของฉัน'}
       </h1>
 
+      <div className="flex gap-2 flex-wrap mb-3">
+        <input
+          className="border rounded-lg px-3 py-2 flex-1 min-w-[180px] bg-white"
+          placeholder="🔍 ค้นหา เลขที่บิล / ลูกค้า"
+          value={qSearch}
+          onChange={(e) => setQSearch(e.target.value)}
+        />
+        <select
+          className="border rounded-lg px-3 py-2 bg-white"
+          value={qStatus}
+          onChange={(e) => setQStatus(e.target.value)}
+        >
+          <option value="">ทุกสถานะ</option>
+          {Object.entries(STATUS).map(([k, v]) => (
+            <option key={k} value={k}>
+              {v[0]}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <div className="bg-white rounded-xl shadow overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500">
@@ -153,7 +197,7 @@ export default function OrdersClient({
             </tr>
           </thead>
           <tbody>
-            {orders.map((o) => (
+            {filtered.map((o) => (
               <tr key={o.id} className="border-t">
                 <td className="p-3">
                   {o.code}
