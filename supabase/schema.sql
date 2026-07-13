@@ -384,3 +384,75 @@ begin
 end $$;
 
 grant execute on function create_order(uuid, uuid, pay_method, text, jsonb) to authenticated;
+
+-- ============================================================
+--  RPC: จ่ายสต๊อกให้คนส่ง (ตัดคลังหลัก + เพิ่มสต๊อกบนรถ + ใบคุม)
+-- ============================================================
+create or replace function allocate_stock(
+  p_driver uuid,
+  p_items jsonb   -- [{product_id, qty, name, unit}]
+) returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  v_alloc uuid;
+  it jsonb; v_pid uuid; v_qty numeric; v_avail numeric;
+begin
+  if not is_admin() then raise exception 'เฉพาะแอดมิน'; end if;
+  for it in select * from jsonb_array_elements(p_items) loop
+    v_pid := (it->>'product_id')::uuid; v_qty := (it->>'qty')::numeric;
+    select stock into v_avail from products where id = v_pid;
+    if coalesce(v_avail,0) < v_qty then
+      raise exception 'สต๊อกคลังไม่พอ: %', coalesce(it->>'name','สินค้า');
+    end if;
+  end loop;
+
+  insert into allocations(driver_id, created_by) values (p_driver, auth.uid())
+    returning id into v_alloc;
+
+  for it in select * from jsonb_array_elements(p_items) loop
+    v_pid := (it->>'product_id')::uuid; v_qty := (it->>'qty')::numeric;
+    insert into allocation_items(allocation_id, product_id, name, unit, qty)
+      values (v_alloc, v_pid, it->>'name', it->>'unit', v_qty);
+    update products set stock = stock - v_qty where id = v_pid;
+    insert into driver_stock(driver_id, product_id, qty)
+      values (p_driver, v_pid, v_qty)
+      on conflict (driver_id, product_id) do update set qty = driver_stock.qty + excluded.qty;
+  end loop;
+
+  return json_build_object('id', v_alloc);
+end $$;
+grant execute on function allocate_stock(uuid, jsonb) to authenticated;
+
+-- ============================================================
+--  RPC: เคลมสินค้า (คนส่งแจ้ง ตัดจากสต๊อกบนรถ)
+-- ============================================================
+create or replace function create_claim(
+  p_customer uuid,
+  p_note text,
+  p_photo text,
+  p_items jsonb   -- [{product_id, qty_pack, name, unit}]  (qty_pack = จำนวนแผง/กล่องที่ตัดจริง)
+) returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_claim uuid;
+  it jsonb; v_pid uuid; v_pack numeric; v_qty numeric; v_avail numeric;
+begin
+  insert into claims(driver_id, customer_id, created_by, note, photo_url)
+    values (v_uid, p_customer, v_uid, coalesce(p_note,''), coalesce(p_photo,''))
+    returning id into v_claim;
+  for it in select * from jsonb_array_elements(p_items) loop
+    v_pid := (it->>'product_id')::uuid;
+    v_pack := (it->>'qty_pack')::numeric;   -- จำนวนหน่วยที่ตัดจากสต๊อก
+    v_qty := coalesce((it->>'qty')::numeric, v_pack);  -- จำนวนที่บันทึก (อาจเป็นฟอง)
+    select qty into v_avail from driver_stock where driver_id = v_uid and product_id = v_pid;
+    if coalesce(v_avail,0) < v_pack then
+      raise exception 'สต๊อกบนรถไม่พอ: %', coalesce(it->>'name','สินค้า');
+    end if;
+    insert into claim_items(claim_id, product_id, name, unit, qty)
+      values (v_claim, v_pid, it->>'name', it->>'unit', v_qty);
+    update driver_stock set qty = qty - v_pack where driver_id = v_uid and product_id = v_pid;
+  end loop;
+  return json_build_object('id', v_claim);
+end $$;
+grant execute on function create_claim(uuid, text, text, jsonb) to authenticated;
