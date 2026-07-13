@@ -83,6 +83,15 @@ export default function DashboardClient({
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
 
+  // กราฟยอดขายรายวัน (สูงสุด 14 วันล่าสุดในช่วง)
+  const dayMap: Record<string, number> = {};
+  inR.forEach((o) => {
+    const d = o.created_at.slice(0, 10);
+    dayMap[d] = (dayMap[d] || 0) + Number(o.total_sell);
+  });
+  const days = Object.keys(dayMap).sort().slice(-14);
+  const maxV = Math.max(1, ...days.map((d) => dayMap[d]));
+
   const Stat = ({ k, v, c }: { k: string; v: string; c?: string }) => (
     <div className="bg-white rounded-xl shadow p-4">
       <div className="text-gray-500 text-sm">{k}</div>
@@ -116,6 +125,35 @@ export default function DashboardClient({
         <Stat k="จำนวนบิล" v={String(inR.length)} c="text-gray-700" />
         <Stat k="ค้างชำระ" v={money(credit)} c="text-red-600" />
       </div>
+
+      {days.length > 0 && (
+        <div className="bg-white rounded-xl shadow p-4 mb-4">
+          <h3 className="font-bold mb-3">ยอดขายรายวัน</h3>
+          <div className="flex items-end gap-1.5 h-40">
+            {days.map((d) => {
+              const h = Math.round((dayMap[d] / maxV) * 100);
+              const dd = new Date(d + 'T00:00:00');
+              return (
+                <div
+                  key={d}
+                  className="flex-1 flex flex-col items-center justify-end gap-1 h-full"
+                >
+                  <div className="text-[10px] text-gray-500">
+                    {dayMap[d] ? Math.round((dayMap[d] / 1000) * 10) / 10 + 'k' : ''}
+                  </div>
+                  <div
+                    className="w-full max-w-[34px] rounded-t bg-green-500"
+                    style={{ height: `${Math.max(4, h)}%` }}
+                  />
+                  <div className="text-[10px] text-gray-400">
+                    {dd.getDate()}/{dd.getMonth() + 1}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl shadow p-4 mb-4">
         <h3 className="font-bold mb-2">แยกตามการชำระเงิน</h3>

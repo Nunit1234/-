@@ -9,6 +9,16 @@ export const EGG_TYPES: Record<string, string> = {
 
 export const UNIT_PER: Record<string, number> = { 'ฟอง': 1, 'แผง': 30, 'กล่อง': 50 };
 
+// รูป default ตามประเภทไข่ (อยู่ใน public/)
+export const TYPE_IMAGE: Record<string, string> = {
+  DUCK: '/egg-duck.jpg',
+  CHICKEN: '/egg-chicken.jpg',
+  SALTED: '/egg-salted.jpg',
+  CENTURY: '/egg-century.jpg',
+};
+export const productImage = (p: { image_url?: string; type: string }) =>
+  p.image_url || TYPE_IMAGE[p.type] || '';
+
 export type Product = {
   id: string;
   name: string;

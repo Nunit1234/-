@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { redirect } from 'next/navigation';
 import DashboardClient from '@/components/DashboardClient';
 
 export default async function Home() {
@@ -13,15 +14,9 @@ export default async function Home() {
     .single();
   const role = profile?.role ?? 'delivery';
 
+  // คนส่งไม่มีหน้าหลัก — เข้าไปที่ "งานส่งของฉัน" เลย
   if (role !== 'admin') {
-    return (
-      <div className="p-5 max-w-2xl">
-        <h1 className="text-2xl font-bold text-green-900 mb-1">
-          สวัสดี {profile?.name || user?.email}
-        </h1>
-        <p className="text-gray-500">คนส่ง — ใช้เมนูซ้ายเพื่อดูสต๊อก งานส่ง และขายสินค้า</p>
-      </div>
-    );
+    redirect('/delivery');
   }
 
   const { data: lowStock } = await supabase

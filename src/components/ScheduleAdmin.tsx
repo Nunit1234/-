@@ -69,6 +69,7 @@ export default function ScheduleAdmin({
     router.refresh();
   }
   async function del(id: string) {
+    if (!confirm('ลบร้านนี้ออกจากคิว?')) return;
     await supabase.from('schedule').delete().eq('id', id);
     router.refresh();
   }

@@ -23,7 +23,6 @@ const NAV: Record<Role, [string, string][]> = {
     ['/settings', '⚙️ ตั้งค่าร้าน'],
   ],
   delivery: [
-    ['/', '📊 หน้าหลัก'],
     ['/pos', '🧾 ขายสินค้า'],
     ['/mystock', '📦 สต๊อกของฉัน'],
     ['/schedule', '🗓️ ตารางงานของฉัน'],

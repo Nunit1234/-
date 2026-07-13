@@ -66,6 +66,7 @@ export default function ExpensesClient({
   }
 
   async function del(id: string) {
+    if (!confirm('ลบรายการค่าใช้จ่ายนี้?')) return;
     await supabase.from('expenses').delete().eq('id', id);
     router.refresh();
   }

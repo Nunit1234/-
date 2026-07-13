@@ -28,3 +28,40 @@ body {
 main > div {
   margin-inline: auto;
 }
+
+/* ===== สกอร์ลบาร์บาง เข้าธีม (แทนแบบ default เชยๆ) ===== */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 130, 105, 0.45) transparent;
+}
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(120, 130, 105, 0.45);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(90, 100, 80, 0.6);
+  background-clip: content-box;
+}
+/* สกอร์ลบาร์ในแถบเมนูเขียวเข้ม ให้เป็นสีอ่อน */
+aside ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.28);
+  background-clip: content-box;
+}
+aside {
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+/* ===== การ์ดให้มีขอบบาง + เงานุ่มแบบต้นแบบ ===== */
+main .shadow {
+  border: 1px solid #e6ecdd;
+  box-shadow: 0 1px 3px rgba(30, 45, 20, 0.08), 0 1px 2px rgba(30, 45, 20, 0.05);
+}

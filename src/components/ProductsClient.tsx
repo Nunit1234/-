@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import ImageUpload from '@/components/ImageUpload';
-import { EGG_TYPES, UNIT_PER, type Product } from '@/lib/types';
+import { EGG_TYPES, UNIT_PER, productImage, type Product } from '@/lib/types';
 import { money, fmtQty, unitInfo } from '@/lib/format';
 
 type FormState = {
@@ -110,10 +110,10 @@ export default function ProductsClient({ initial }: { initial: Product[] }) {
               <tr key={p.id} className="border-t">
                 <td className="p-3">
                   <div className="flex items-center gap-2">
-                    {p.image_url ? (
+                    {productImage(p) ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={p.image_url}
+                        src={productImage(p)}
                         alt=""
                         className="w-10 h-10 rounded object-cover flex-shrink-0"
                       />

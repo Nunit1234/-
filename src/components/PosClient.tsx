@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import ImageUpload from '@/components/ImageUpload';
-import { type Customer, type Product, type Role } from '@/lib/types';
+import { productImage, type Customer, type Product, type Role } from '@/lib/types';
 import { money, fmtQty, unitInfo } from '@/lib/format';
 
 type SettingsLite = {
@@ -46,6 +46,7 @@ export default function PosClient({
   const [customerId, setCustomerId] = useState(
     initialCustomerId || customers[0]?.id || ''
   );
+  const [search, setSearch] = useState('');
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [cart, setCart] = useState<Record<string, number>>({});
   const [payMethod, setPayMethod] = useState('CASH');
@@ -81,9 +82,14 @@ export default function PosClient({
 
   const priceFor = (p: Product) => prices[p.id] ?? p.default_price;
   const stockOf = (p: Product) => (isAdmin ? p.stock : driverStock[p.id] ?? 0);
-  const visible = isAdmin
+  const baseVisible = isAdmin
     ? products
     : products.filter((p) => stockOf(p) > 0 || (cart[p.id] ?? 0) > 0);
+  const visible = search.trim()
+    ? baseVisible.filter((p) =>
+        p.name.toLowerCase().includes(search.trim().toLowerCase())
+      )
+    : baseVisible;
 
   const lines = Object.entries(cart).filter(([, q]) => q > 0);
   const total = lines.reduce((s, [pid, q]) => {
@@ -208,6 +214,12 @@ export default function PosClient({
             </button>
           </div>
 
+          <input
+            className="w-full border rounded-lg px-3 py-2 mb-2 bg-white"
+            placeholder="🔍 ค้นหาสินค้า…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
           <div className="bg-white rounded-xl shadow divide-y max-h-[60vh] overflow-auto">
             {visible.map((p) => {
               const q = cart[p.id] ?? 0;
@@ -220,10 +232,10 @@ export default function PosClient({
                     q > 0 ? 'bg-green-50' : ''
                   }`}
                 >
-                  {p.image_url ? (
+                  {productImage(p) ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={p.image_url}
+                      src={productImage(p)}
                       alt=""
                       className="w-14 h-14 rounded-lg object-cover flex-shrink-0"
                     />
