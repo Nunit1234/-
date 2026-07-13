@@ -1,0 +1,84 @@
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useState } from 'react';
+import type { Role } from '@/lib/types';
+
+const NAV: Record<Role, [string, string][]> = {
+  admin: [
+    ['/', '📊 แดชบอร์ด'],
+    ['/products', '🥚 สินค้า & สต๊อก'],
+    ['/customers', '👥 ลูกค้า & ราคา'],
+  ],
+  delivery: [['/', '📊 หน้าหลัก']],
+};
+
+const ROLE_LABEL: Record<Role, string> = {
+  admin: 'แอดมิน (เจ้าของ)',
+  delivery: 'คนส่ง',
+};
+
+export default function Sidebar({ role, name }: { role: Role; name: string }) {
+  const path = usePathname();
+  const [open, setOpen] = useState(false);
+  const links = NAV[role] || [];
+
+  return (
+    <>
+      {/* Top bar (มือถือ) */}
+      <div className="md:hidden fixed top-0 inset-x-0 z-30 bg-green-800 text-white flex items-center gap-3 px-4 h-14">
+        <button onClick={() => setOpen(true)} className="text-2xl leading-none">
+          ☰
+        </button>
+        <span className="font-bold">🦆 เจ้านายฟาร์มเป็ด</span>
+      </div>
+
+      {/* Scrim (มือถือ) */}
+      {open && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/40 z-30"
+          onClick={() => setOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={`fixed md:static z-40 top-0 left-0 h-full w-64 bg-green-900 text-green-50 flex flex-col
+        transform transition-transform md:transform-none ${
+          open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        }`}
+      >
+        <div className="px-4 py-4 font-bold text-lg border-b border-white/10">
+          🦆 เจ้านายฟาร์มเป็ด
+        </div>
+        <nav className="flex-1 p-2 overflow-auto">
+          {links.map(([href, label]) => {
+            const active = path === href;
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setOpen(false)}
+                className={`block px-4 py-2.5 rounded-lg my-0.5 text-sm ${
+                  active ? 'bg-green-600 text-white' : 'hover:bg-white/10'
+                }`}
+              >
+                {label}
+              </Link>
+            );
+          })}
+        </nav>
+        <div className="p-4 border-t border-white/10 text-sm">
+          <div className="font-semibold text-white">{name}</div>
+          <div className="text-green-300 text-xs mb-2">{ROLE_LABEL[role]}</div>
+          <form action="/auth/signout" method="post">
+            <button className="w-full bg-white/10 hover:bg-white/20 rounded-lg py-1.5 text-sm">
+              ออกจากระบบ
+            </button>
+          </form>
+        </div>
+      </aside>
+    </>
+  );
+}
