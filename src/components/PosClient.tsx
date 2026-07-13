@@ -90,6 +90,10 @@ export default function PosClient({
     const p = products.find((x) => x.id === pid);
     return s + (p ? priceFor(p) : 0) * q;
   }, 0);
+  const totalCost = lines.reduce((s, [pid, q]) => {
+    const p = products.find((x) => x.id === pid);
+    return s + (p ? Number(p.cost) : 0) * q;
+  }, 0);
 
   function setQty(pid: string, q: number) {
     setCart((c) => ({ ...c, [pid]: Math.max(0, q) }));
@@ -304,6 +308,18 @@ export default function PosClient({
               <span>รวมทั้งสิ้น</span>
               <span>{money(total)}</span>
             </div>
+            {isAdmin && (
+              <>
+                <div className="flex justify-between text-sm text-gray-500 mt-1">
+                  <span>ต้นทุน</span>
+                  <span>{money(totalCost)}</span>
+                </div>
+                <div className="flex justify-between text-sm font-semibold text-green-700">
+                  <span>กำไร</span>
+                  <span>{money(total - totalCost)}</span>
+                </div>
+              </>
+            )}
 
             <label className="block text-xs text-gray-500 mt-3">วิธีชำระเงิน</label>
             <select

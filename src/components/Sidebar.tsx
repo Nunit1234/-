@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
 import type { Role } from '@/lib/types';
 
 const NAV: Record<Role, [string, string][]> = {
@@ -48,8 +49,16 @@ export default function Sidebar({
   badges?: Record<string, number>;
 }) {
   const path = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const links = NAV[role] || [];
+
+  async function logout() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push('/login');
+    router.refresh();
+  }
 
   return (
     <>
@@ -108,11 +117,12 @@ export default function Sidebar({
         <div className="p-4 border-t border-white/10 text-sm">
           <div className="font-semibold text-white">{name}</div>
           <div className="text-green-300 text-xs mb-2">{ROLE_LABEL[role]}</div>
-          <form action="/auth/signout" method="post">
-            <button className="w-full bg-white/10 hover:bg-white/20 rounded-lg py-1.5 text-sm">
-              ออกจากระบบ
-            </button>
-          </form>
+          <button
+            onClick={logout}
+            className="w-full bg-white/10 hover:bg-white/20 rounded-lg py-1.5 text-sm"
+          >
+            ออกจากระบบ
+          </button>
         </div>
       </aside>
     </>
