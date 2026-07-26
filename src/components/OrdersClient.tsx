@@ -21,10 +21,12 @@ type OrderRow = {
 };
 
 type OrderItem = {
+  product_id: string | null;
   name: string;
   unit: string;
   qty: number;
   sell_price: number;
+  cost: number;
 };
 
 const STATUS: Record<string, [string, string]> = {
@@ -108,6 +110,7 @@ export default function OrdersClient({
   const [status, setStatus] = useState('');
   const [delivery, setDelivery] = useState('');
   const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
   const [qSearch, setQSearch] = useState('');
   const [qStatus, setQStatus] = useState('');
 
@@ -131,7 +134,7 @@ export default function OrdersClient({
     setItems([]);
     const { data } = await supabase
       .from('order_items')
-      .select('name, unit, qty, sell_price')
+      .select('product_id, name, unit, qty, sell_price, cost')
       .eq('order_id', o.id);
     setItems((data ?? []) as OrderItem[]);
   }
@@ -139,11 +142,61 @@ export default function OrdersClient({
   async function saveOrder() {
     if (!open) return;
     setSaving(true);
-    await supabase
+    setErr('');
+
+    // เปลี่ยนเป็นส่งสำเร็จ = ปิดงานส่ง ต้องผ่าน RPC เพื่อให้ตัดสต๊อกตามรายการในบิล
+    if (status === 'DELIVERED' && open.status !== 'DELIVERED') {
+      if (delivery !== (open.delivery_id ?? '')) {
+        await supabase
+          .from('orders')
+          .update({ delivery_id: delivery || null })
+          .eq('id', open.id);
+      }
+      const { error } = await supabase.rpc('complete_delivery', {
+        p_order: open.id,
+        p_items: items.map((i) => ({
+          product_id: i.product_id,
+          qty: Number(i.qty),
+          sell_price: Number(i.sell_price),
+          cost: Number(i.cost),
+          name: i.name,
+          unit: i.unit,
+        })),
+        p_proof: '',
+        p_receiver: null,
+      });
+      setSaving(false);
+      if (error) {
+        setErr('ปิดงานส่งไม่สำเร็จ: ' + error.message);
+        return;
+      }
+      setOpen(null);
+      router.refresh();
+      return;
+    }
+
+    // ย้อนบิลที่ปิดงานไปแล้ว ต้องผ่าน RPC เพื่อคืนของกลับเข้าสต๊อก
+    if (open.status === 'DELIVERED' && status !== 'DELIVERED') {
+      const { error: reErr } = await supabase.rpc('reopen_delivery', {
+        p_order: open.id,
+        p_status: status,
+      });
+      if (reErr) {
+        setSaving(false);
+        setErr('ย้อนสถานะไม่สำเร็จ: ' + reErr.message);
+        return;
+      }
+    }
+
+    const { error } = await supabase
       .from('orders')
       .update({ status, delivery_id: delivery || null })
       .eq('id', open.id);
     setSaving(false);
+    if (error) {
+      setErr('บันทึกไม่สำเร็จ: ' + error.message);
+      return;
+    }
     setOpen(null);
     router.refresh();
   }
@@ -334,6 +387,13 @@ export default function OrdersClient({
             >
               🖨️ พิมพ์ใบเสร็จ / บิล
             </button>
+
+            {status === 'DELIVERED' && open.status !== 'DELIVERED' && (
+              <p className="text-xs text-gray-500 mb-2">
+                กดบันทึกแล้วระบบจะตัดสต๊อกตามรายการในบิลนี้ (หักจากรถคนส่งก่อน ขาดเท่าไรหักจากคลังกลาง)
+              </p>
+            )}
+            {err && <p className="text-red-600 text-sm mb-2">{err}</p>}
 
             <div className="flex justify-end gap-2 mt-2">
               <button

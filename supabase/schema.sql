@@ -97,8 +97,10 @@ create table if not exists stock_intake_items (
   name       text not null default '',    -- เก็บชื่อ/หน่วย/ทุน ณ ตอนรับเข้า เพื่อดูย้อนหลังได้ตรง
   unit       text not null default '',
   qty        numeric(12,2) not null,
-  cost       numeric(12,2) not null default 0
+  cost       numeric(12,2) not null default 0,
+  sell_price numeric(12,2) not null default 0   -- ราคาขายที่ตั้งไว้ ณ รอบนั้น
 );
+alter table stock_intake_items add column if not exists sell_price numeric(12,2) not null default 0;
 create index if not exists idx_intake_items_intake on stock_intake_items(intake_id);
 
 -- ---------- customer_prices (ราคาขายเฉพาะรายลูกค้า) ----------
@@ -357,6 +359,30 @@ create policy customers_ins on customers for insert to authenticated with check 
 --  RPC: สร้างออเดอร์ + ตัดสต๊อกแบบอะตอมมิก
 --  (คนส่งตัดจากสต๊อกบนรถ / แอดมินตัดจากคลังหลัก)
 -- ============================================================
+-- ตัดสต๊อกของจริง: หักจากรถก่อน ขาดเท่าไรค่อยหักจากคลังกลาง และไม่ปล่อยให้ติดลบ
+create or replace function deduct_stock(p_driver uuid, p_product uuid, p_qty numeric)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_avail numeric; v_take numeric; v_rest numeric;
+begin
+  v_rest := coalesce(p_qty, 0);
+  if v_rest <= 0 then return; end if;
+
+  if p_driver is not null then
+    select qty into v_avail from driver_stock
+      where driver_id = p_driver and product_id = p_product;
+    v_take := least(coalesce(v_avail, 0), v_rest);
+    if v_take > 0 then
+      update driver_stock set qty = qty - v_take
+        where driver_id = p_driver and product_id = p_product;
+      v_rest := v_rest - v_take;
+    end if;
+  end if;
+
+  if v_rest > 0 then
+    update products set stock = greatest(0, stock - v_rest) where id = p_product;
+  end if;
+end $$;
+
 create or replace function create_order(
   p_customer uuid,
   p_delivery uuid,
@@ -389,13 +415,12 @@ begin
   for it in select * from jsonb_array_elements(p_items) loop
     v_pid := (it->>'product_id')::uuid;
     v_qty := (it->>'qty')::numeric;
+    -- เช็คสต๊อกเฉพาะบิลที่ปิดจบทันที (คนส่งขายหน้างาน) บิลที่รอส่งยังไม่ตัดของ
     if v_by_delivery then
       select qty into v_avail from driver_stock where driver_id = v_uid and product_id = v_pid;
-    else
-      select stock into v_avail from products where id = v_pid;
-    end if;
-    if coalesce(v_avail,0) < v_qty then
-      raise exception 'สต๊อกไม่พอ: %', coalesce(it->>'name','สินค้า');
+      if coalesce(v_avail,0) < v_qty then
+        raise exception 'สต๊อกบนรถไม่พอ: %', coalesce(it->>'name','สินค้า');
+      end if;
     end if;
     v_total_sell := v_total_sell + (it->>'sell_price')::numeric * v_qty;
     v_total_cost := v_total_cost + (it->>'cost')::numeric * v_qty;
@@ -416,10 +441,10 @@ begin
     insert into order_items(order_id, product_id, name, unit, qty, sell_price, cost)
     values (v_order_id, v_pid, it->>'name', it->>'unit', v_qty,
             (it->>'sell_price')::numeric, (it->>'cost')::numeric);
-    if v_by_delivery then
-      update driver_stock set qty = qty - v_qty where driver_id = v_uid and product_id = v_pid;
-    else
-      update products set stock = stock - v_qty where id = v_pid;
+    -- ตัดสต๊อกเฉพาะบิลที่ปิดจบทันที (คนส่งขายหน้างาน)
+    -- บิลที่ยังต้องไปส่ง จะไปตัดตอนกดส่งสำเร็จตามยอดจริง (complete_delivery)
+    if v_status = 'DELIVERED' then
+      perform deduct_stock(v_uid, v_pid, v_qty);
     end if;
   end loop;
 
@@ -429,6 +454,111 @@ end $$;
 grant execute on function create_order(uuid, uuid, pay_method, text, jsonb) to authenticated;
 
 -- ============================================================
+--  RPC: ปิดงานส่ง (บันทึกยอดจริงที่ส่ง + ตัดสต๊อก + ปิดบิล)
+--  ยอดจริงอาจไม่เท่าใบสั่ง เพราะคนส่งขายเพิ่ม/ลดหน้างานได้
+-- ============================================================
+create or replace function complete_delivery(
+  p_order uuid,
+  p_items jsonb,   -- [{product_id, qty, sell_price, cost, name, unit}] = ยอดที่ส่งจริง
+  p_proof text,
+  p_receiver text
+) returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_status order_status;
+  v_delivery uuid;
+  v_created_by uuid;
+  v_pay pay_method;
+  v_driver uuid;
+  v_total_sell numeric := 0;
+  v_total_cost numeric := 0;
+  it jsonb; v_pid uuid; v_qty numeric;
+begin
+  select status, delivery_id, created_by, pay_method
+    into v_status, v_delivery, v_created_by, v_pay
+    from orders where id = p_order;
+  if v_status is null then raise exception 'ไม่พบออเดอร์'; end if;
+  if not is_admin() and v_delivery is distinct from v_uid and v_created_by is distinct from v_uid then
+    raise exception 'ไม่มีสิทธิ์ปิดงานส่งบิลนี้';
+  end if;
+  if v_status = 'DELIVERED' then raise exception 'บิลนี้ปิดงานไปแล้ว'; end if;
+  if v_status = 'CANCELLED' then raise exception 'บิลนี้ถูกยกเลิกแล้ว'; end if;
+
+  -- ของหักจากรถของคนส่งที่รับผิดชอบบิล (ถ้าไม่มีคนส่ง = ลูกค้ามารับเอง หักจากคลังกลาง)
+  v_driver := v_delivery;
+
+  delete from order_items where order_id = p_order;
+
+  for it in select * from jsonb_array_elements(p_items) loop
+    v_pid := (it->>'product_id')::uuid;
+    v_qty := (it->>'qty')::numeric;
+    if coalesce(v_qty,0) <= 0 then continue; end if;
+    insert into order_items(order_id, product_id, name, unit, qty, sell_price, cost)
+      values (p_order, v_pid, it->>'name', it->>'unit', v_qty,
+              coalesce((it->>'sell_price')::numeric,0), coalesce((it->>'cost')::numeric,0));
+    v_total_sell := v_total_sell + coalesce((it->>'sell_price')::numeric,0) * v_qty;
+    v_total_cost := v_total_cost + coalesce((it->>'cost')::numeric,0) * v_qty;
+    perform deduct_stock(v_driver, v_pid, v_qty);
+  end loop;
+
+  update orders set
+    status       = 'DELIVERED',
+    delivered_at = now(),
+    proof_url    = case when coalesce(p_proof,'') <> '' then p_proof else proof_url end,
+    receiver     = coalesce(p_receiver, receiver),
+    total_sell   = v_total_sell,
+    total_cost   = v_total_cost,
+    pay_status   = case when v_pay = 'CREDIT' then pay_status else 'PAID' end
+  where id = p_order;
+
+  return json_build_object('id', p_order, 'total_sell', v_total_sell);
+end $$;
+grant execute on function complete_delivery(uuid, jsonb, text, text) to authenticated;
+
+-- ============================================================
+--  RPC: ย้อนสถานะบิลที่ปิดงานไปแล้ว (กดผิด) — คืนของกลับเข้าสต๊อกด้วย
+--  ของคืนเข้ารถคนส่ง ถ้าไม่มีคนส่งก็คืนเข้าคลังกลาง
+-- ============================================================
+create or replace function reopen_delivery(p_order uuid, p_status order_status)
+returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_status order_status;
+  v_delivery uuid;
+  v_created_by uuid;
+  r record;
+begin
+  select status, delivery_id, created_by
+    into v_status, v_delivery, v_created_by
+    from orders where id = p_order;
+  if v_status is null then raise exception 'ไม่พบออเดอร์'; end if;
+  if not is_admin() and v_delivery is distinct from v_uid and v_created_by is distinct from v_uid then
+    raise exception 'ไม่มีสิทธิ์แก้บิลนี้';
+  end if;
+  if p_status = 'DELIVERED' then raise exception 'ใช้ปิดงานส่งแทน'; end if;
+
+  -- คืนของเฉพาะบิลที่เคยตัดสต๊อกไปแล้ว (สถานะส่งสำเร็จ)
+  if v_status = 'DELIVERED' then
+    for r in select product_id, qty from order_items where order_id = p_order loop
+      if r.product_id is null then continue; end if;
+      if v_delivery is not null then
+        insert into driver_stock(driver_id, product_id, qty)
+          values (v_delivery, r.product_id, r.qty)
+          on conflict (driver_id, product_id) do update set qty = driver_stock.qty + excluded.qty;
+      else
+        update products set stock = stock + r.qty where id = r.product_id;
+      end if;
+    end loop;
+  end if;
+
+  update orders set status = p_status, delivered_at = null where id = p_order;
+  return json_build_object('id', p_order, 'restored', v_status = 'DELIVERED');
+end $$;
+grant execute on function reopen_delivery(uuid, order_status) to authenticated;
+
+-- ============================================================
 --  RPC: รับไข่เข้าคลัง (จากฟาร์มเราเอง หรือจากร้านค้าส่ง) — บวกเข้าสต๊อกกลาง
 -- ============================================================
 create or replace function create_intake(
@@ -436,13 +566,13 @@ create or replace function create_intake(
   p_date date,
   p_supplier text,
   p_note text,
-  p_items jsonb   -- [{product_id, qty, name, unit, cost}]
+  p_items jsonb   -- [{product_id, qty, name, unit, cost, sell_price}]
 ) returns json
 language plpgsql security definer set search_path = public as $$
 declare
   v_intake uuid;
   v_total numeric := 0;
-  it jsonb; v_pid uuid; v_qty numeric; v_cost numeric;
+  it jsonb; v_pid uuid; v_qty numeric; v_cost numeric; v_price numeric;
 begin
   if not is_admin() then raise exception 'เฉพาะแอดมิน'; end if;
   if jsonb_array_length(p_items) = 0 then raise exception 'ยังไม่ได้เลือกสินค้า'; end if;
@@ -461,12 +591,19 @@ begin
   returning id into v_intake;
 
   for it in select * from jsonb_array_elements(p_items) loop
-    v_pid  := (it->>'product_id')::uuid;
-    v_qty  := (it->>'qty')::numeric;
-    v_cost := coalesce((it->>'cost')::numeric, 0);
-    insert into stock_intake_items(intake_id, product_id, name, unit, qty, cost)
-      values (v_intake, v_pid, it->>'name', it->>'unit', v_qty, v_cost);
-    update products set stock = stock + v_qty where id = v_pid;
+    v_pid   := (it->>'product_id')::uuid;
+    v_qty   := (it->>'qty')::numeric;
+    v_cost  := (it->>'cost')::numeric;         -- null ถ้าไม่ส่งมา
+    v_price := (it->>'sell_price')::numeric;   -- null ถ้าไม่ส่งมา
+    insert into stock_intake_items(intake_id, product_id, name, unit, qty, cost, sell_price)
+      values (v_intake, v_pid, it->>'name', it->>'unit', v_qty,
+              coalesce(v_cost,0), coalesce(v_price,0));
+    -- บวกสต๊อก + อัปเดตทุน/ราคาขายหลักเป็นค่าล่าสุดของรอบนี้ (ไม่ส่งมา = ไม่แตะของเดิม)
+    update products set
+      stock = stock + v_qty,
+      cost = coalesce(v_cost, cost),
+      default_price = coalesce(v_price, default_price)
+    where id = v_pid;
   end loop;
 
   return json_build_object('id', v_intake, 'total_cost', v_total);

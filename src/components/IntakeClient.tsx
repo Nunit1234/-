@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { productImage, type Product } from '@/lib/types';
 import { money, fmtQty } from '@/lib/format';
 
-type IntakeItem = { name: string; unit: string; qty: number; cost: number };
+type IntakeItem = { name: string; unit: string; qty: number; cost: number; sell_price?: number };
 
 type Intake = {
   id: string;
@@ -44,8 +44,9 @@ export default function IntakeClient({
   const [note, setNote] = useState('');
   const [search, setSearch] = useState('');
   const [qty, setQty] = useState<Record<string, number>>({});
-  // ต้นทุนต่อหน่วยของรอบนี้ ตั้งต้นจากต้นทุนเดิมของสินค้า แต่แก้เฉพาะรอบนี้ได้
+  // ทุนและราคาขายของรอบนี้ ตั้งต้นจากค่าเดิมของสินค้า บันทึกแล้วจะกลายเป็นค่าล่าสุดของสินค้า
   const [cost, setCost] = useState<Record<string, string>>({});
+  const [price, setPrice] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [okMsg, setOkMsg] = useState('');
@@ -55,20 +56,28 @@ export default function IntakeClient({
     ? products.filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()))
     : products;
 
-  const costOf = (p: Product) => {
-    const raw = cost[p.id];
+  const numOr = (raw: string | undefined, fallback: number) => {
     if (raw !== undefined && raw !== '') {
       const n = Number(raw);
       if (!Number.isNaN(n) && n >= 0) return n;
     }
-    return Number(p.cost);
+    return fallback;
   };
+  const costOf = (p: Product) => numOr(cost[p.id], Number(p.cost));
+  const priceOf = (p: Product) => numOr(price[p.id], Number(p.default_price));
 
   const lines = Object.entries(qty).filter(([, q]) => q > 0);
   const totalCost = lines.reduce((s, [pid, q]) => {
     const p = products.find((x) => x.id === pid);
     return s + (p ? costOf(p) : 0) * q;
   }, 0);
+  // สินค้าที่ทุนหรือราคาขายรอบนี้ต่างจากที่ตั้งไว้ในหน้าสินค้า
+  const changed = lines
+    .map(([pid]) => products.find((x) => x.id === pid))
+    .filter(
+      (p): p is Product =>
+        !!p && (costOf(p) !== Number(p.cost) || priceOf(p) !== Number(p.default_price))
+    );
 
   async function save() {
     if (!lines.length) {
@@ -79,7 +88,14 @@ export default function IntakeClient({
     setErr('');
     const items = lines.map(([pid, q]) => {
       const p = products.find((x) => x.id === pid)!;
-      return { product_id: pid, qty: q, name: p.name, unit: p.unit, cost: costOf(p) };
+      return {
+        product_id: pid,
+        qty: q,
+        name: p.name,
+        unit: p.unit,
+        cost: costOf(p),
+        sell_price: priceOf(p),
+      };
     });
     const { error } = await supabase.rpc('create_intake', {
       p_source: source,
@@ -96,6 +112,7 @@ export default function IntakeClient({
     setOkMsg(`รับไข่เข้าคลังแล้ว ${items.length} รายการ • ต้นทุนรวม ${money(totalCost)}`);
     setQty({});
     setCost({});
+    setPrice({});
     setNote('');
     setSupplier('');
     router.refresh();
@@ -188,19 +205,45 @@ export default function IntakeClient({
                       ในคลังตอนนี้ {fmtQty(Number(p.stock))} {p.unit}
                     </div>
                     {q > 0 && (
-                      <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                        <span className="text-xs text-gray-500">ทุน/หน่วย</span>
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          className="w-20 border rounded-lg px-2 py-1 text-sm"
-                          value={cost[p.id] ?? String(Number(p.cost))}
-                          onChange={(e) => setCost({ ...cost, [p.id]: e.target.value })}
-                          onFocus={(e) => e.target.select()}
-                        />
-                        <span className="text-xs text-gray-500">
-                          ฿ • รวม {money(costOf(p) * q)}
+                      <div className="mt-1.5 flex items-center gap-x-3 gap-y-1 flex-wrap">
+                        <span className="flex items-center gap-1.5">
+                          <span className="text-xs text-gray-500">ทุน</span>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            className={`w-20 border rounded-lg px-2 py-1 text-sm ${
+                              costOf(p) !== Number(p.cost) ? 'border-amber-400 bg-amber-50' : ''
+                            }`}
+                            value={cost[p.id] ?? String(Number(p.cost))}
+                            onChange={(e) => setCost({ ...cost, [p.id]: e.target.value })}
+                            onFocus={(e) => e.target.select()}
+                          />
                         </span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="text-xs text-gray-500">ราคาขาย</span>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            className={`w-20 border rounded-lg px-2 py-1 text-sm ${
+                              priceOf(p) !== Number(p.default_price)
+                                ? 'border-amber-400 bg-amber-50'
+                                : ''
+                            }`}
+                            value={price[p.id] ?? String(Number(p.default_price))}
+                            onChange={(e) => setPrice({ ...price, [p.id]: e.target.value })}
+                            onFocus={(e) => e.target.select()}
+                          />
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          ทุนรวม {money(costOf(p) * q)}
+                        </span>
+                        {priceOf(p) < costOf(p) ? (
+                          <span className="text-xs text-red-600">⚠ ราคาขายต่ำกว่าทุน</span>
+                        ) : (
+                          <span className="text-xs text-green-700">
+                            กำไร {money(priceOf(p) - costOf(p))}/{p.unit}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -267,6 +310,28 @@ export default function IntakeClient({
               <span className="text-green-800">{money(totalCost)}</span>
             </div>
 
+            {changed.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2 text-xs">
+                <div className="font-semibold text-amber-800 mb-1">
+                  จะอัปเดตทุน/ราคาขายของสินค้า {changed.length} รายการ
+                </div>
+                {changed.map((p) => (
+                  <div key={p.id} className="text-gray-600">
+                    • {p.name}
+                    {costOf(p) !== Number(p.cost) && (
+                      <> ทุน {money(Number(p.cost))} → {money(costOf(p))}</>
+                    )}
+                    {priceOf(p) !== Number(p.default_price) && (
+                      <>
+                        {' '}
+                        ราคาขาย {money(Number(p.default_price))} → {money(priceOf(p))}
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
             <label className="block text-xs text-gray-500 mt-3">หมายเหตุ (ถ้ามี)</label>
             <input
               className="w-full border rounded-lg px-2 py-2 mb-2"
@@ -328,8 +393,9 @@ export default function IntakeClient({
                         {items.map((it, i) => (
                           <div key={i} className="flex justify-between gap-2 py-0.5">
                             <span>{it.name}</span>
-                            <span className="whitespace-nowrap">
-                              {fmtQty(Number(it.qty))} {it.unit} × {money(it.cost)}
+                            <span className="whitespace-nowrap text-gray-600">
+                              {fmtQty(Number(it.qty))} {it.unit} • ทุน {money(it.cost)}
+                              {Number(it.sell_price) > 0 && <> • ขาย {money(it.sell_price)}</>}
                             </span>
                           </div>
                         ))}

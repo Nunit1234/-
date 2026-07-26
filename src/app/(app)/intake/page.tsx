@@ -18,7 +18,7 @@ export default async function IntakePage() {
     supabase.from('products').select('*').eq('active', true).order('type').order('name'),
     supabase
       .from('stock_intakes')
-      .select('*, stock_intake_items(name, unit, qty, cost)')
+      .select('*, stock_intake_items(name, unit, qty, cost, sell_price)')
       .order('date', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(60),
