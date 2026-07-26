@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { money } from '@/lib/format';
+import { money, signed } from '@/lib/format';
 import type { Role } from '@/lib/types';
 
 type OrderRow = {
@@ -17,9 +17,6 @@ type OrderRow = {
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
-
-// ใส่เครื่องหมายลบเฉพาะตอนค่าไม่เท่ากับศูนย์ กันไม่ให้ขึ้นว่า "−0 ฿"
-const signed = (v: number) => (v < 0 ? '−' : '') + money(Math.abs(v));
 
 function Line({
   k,

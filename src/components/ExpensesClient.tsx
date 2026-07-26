@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { money } from '@/lib/format';
+import { money, signed } from '@/lib/format';
 
 type Expense = {
   id: string;
@@ -24,15 +24,30 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function Row({ k, v, neg, note }: { k: string; v: number; neg?: boolean; note?: string }) {
+  const shown = neg && v !== 0 ? -Math.abs(v) : v;
+  return (
+    <div className="flex justify-between py-2 border-b">
+      <span>
+        {k}
+        {note && <span className="block text-xs text-gray-400">{note}</span>}
+      </span>
+      <span className={shown < 0 ? 'text-red-600' : ''}>{signed(shown)}</span>
+    </div>
+  );
+}
+
 export default function ExpensesClient({
   revenue,
   cogs,
-  commTotal,
+  commPaid,
+  commPending,
   expenses,
 }: {
   revenue: number;
   cogs: number;
-  commTotal: number;
+  commPaid: number; // ค่าคอมที่จ่ายให้คนส่งไปแล้ว
+  commPending: number; // ค่าคอมที่เกิดขึ้นแล้วแต่ยังไม่ได้จ่าย
   expenses: Expense[];
 }) {
   const supabase = createClient();
@@ -41,7 +56,8 @@ export default function ExpensesClient({
   const [form, setForm] = useState({ date: todayISO(), category: 'WAGE', amount: '', note: '' });
   const [saving, setSaving] = useState(false);
 
-  const cat = { WAGE: 0, COMMISSION: commTotal, FUEL: 0, OTHER: 0 };
+  // ค่าคอมในงบนับทั้งที่จ่ายแล้วและที่ยังค้างจ่าย เพราะถือเป็นค่าใช้จ่ายที่เกิดขึ้นแล้ว
+  const cat = { WAGE: 0, COMMISSION: commPaid + commPending, FUEL: 0, OTHER: 0 };
   for (const e of expenses) {
     if (e.category in cat) cat[e.category as keyof typeof cat] += Number(e.amount);
   }
@@ -71,16 +87,6 @@ export default function ExpensesClient({
     router.refresh();
   }
 
-  const Row = ({ k, v, neg }: { k: string; v: number; neg?: boolean }) => (
-    <div className="flex justify-between py-2 border-b">
-      <span>{k}</span>
-      <span className={neg ? 'text-red-600' : ''}>
-        {neg ? '−' : ''}
-        {money(v)}
-      </span>
-    </div>
-  );
-
   return (
     <div className="p-4 md:p-6 max-w-2xl">
       <h1 className="text-xl md:text-2xl font-bold text-green-900 mb-4">
@@ -96,7 +102,16 @@ export default function ExpensesClient({
           <span className="text-green-700">{money(gross)}</span>
         </div>
         <Row k="หัก ค่าแรง" v={cat.WAGE} neg />
-        <Row k="หัก ค่าคอมมิชชั่น" v={cat.COMMISSION} neg />
+        <Row
+          k="หัก ค่าคอมมิชชั่น"
+          v={cat.COMMISSION}
+          neg
+          note={
+            commPending > 0
+              ? `จ่ายแล้ว ${money(commPaid)} • ค้างจ่าย ${money(commPending)}`
+              : undefined
+          }
+        />
         <Row k="หัก ค่าน้ำมัน" v={cat.FUEL} neg />
         <Row k="หัก อื่นๆ" v={cat.OTHER} neg />
         <div className="flex justify-between pt-3 mt-1 border-t-2 border-black font-bold text-lg">
