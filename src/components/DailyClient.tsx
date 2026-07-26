@@ -18,6 +18,43 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// ใส่เครื่องหมายลบเฉพาะตอนค่าไม่เท่ากับศูนย์ กันไม่ให้ขึ้นว่า "−0 ฿"
+const signed = (v: number) => (v < 0 ? '−' : '') + money(Math.abs(v));
+
+function Line({
+  k,
+  v,
+  minus,
+  warn,
+  sub,
+  big,
+}: {
+  k: string;
+  v: number;
+  minus?: boolean; // บรรทัดที่ถูกหักออกจริง แสดงเป็นค่าติดลบสีแดง
+  warn?: boolean; // บรรทัดเตือน (ยังเก็บเงินไม่ได้) สีส้ม ไม่ใส่เครื่องหมายลบ
+  sub?: boolean; // บรรทัดยอดรวมย่อย
+  big?: boolean; // บรรทัดสรุปสุดท้าย
+}) {
+  const shown = minus && v !== 0 ? -Math.abs(v) : v;
+  const color =
+    shown < 0 ? 'text-red-600' : warn ? 'text-amber-600' : big || sub ? 'text-green-700' : '';
+  return (
+    <div
+      className={`flex justify-between py-2 ${
+        big
+          ? 'border-t-2 border-black font-bold text-lg'
+          : sub
+            ? 'border-b font-semibold'
+            : 'border-b'
+      }`}
+    >
+      <span>{k}</span>
+      <span className={color}>{signed(shown)}</span>
+    </div>
+  );
+}
+
 export default function DailyClient({
   role,
   myId,
@@ -71,7 +108,8 @@ export default function DailyClient({
     0
   );
   const comm = panels * rate;
-  const netCash = cash - comm;
+  // ยอดสุทธิ = ยอดขายรวมทุกช่องทาง หักค่าคอมมิชชั่น (ไม่ใช่หักจากเงินสดอย่างเดียว)
+  const net = total - comm;
   const driverName = isAdmin ? profMap[driver] ?? '' : profMap[myId] ?? '';
 
   function print() {
@@ -96,7 +134,7 @@ export default function DailyClient({
       <table><thead><tr><th style="text-align:left">เลขที่</th><th style="text-align:center">ชำระ</th><th style="text-align:right">ยอด</th></tr></thead><tbody>${bills || '<tr><td colspan=3 style="text-align:center;color:#999">ไม่มีบิล</td></tr>'}</tbody></table>
       <table style="margin-top:8px"><tbody>
         ${line('เงินสด', cash)}${line('โอนจ่ายทันที', transfer)}${line('เครดิต/ค้างชำระ', credit)}
-        ${line('ยอดขายรวม', total, true)}${line('หัก ค่าคอมมิชชั่น (' + panels + ' แผง)', comm)}${line('เงินสดสุทธินำส่ง', netCash, true)}
+        ${line('ยอดขายรวม', total, true)}${line('หัก ค่าคอมมิชชั่น (' + panels + ' แผง)', -comm)}${line('ยอดสุทธิหลังหักค่าคอม', net, true)}
       </tbody></table>
       <div class="sign"><div><div class="ln"></div>คนส่ง<br><span style="color:#555">( ${driverName} )</span></div><div><div class="ln"></div>ผู้รับเงิน</div></div>
       <div style="text-align:center;margin-top:16px"><button onclick="window.print()" style="padding:8px 20px">🖨️ พิมพ์</button></div>
@@ -107,18 +145,6 @@ export default function DailyClient({
       w.document.close();
     }
   }
-
-  const Line = ({ k, v, neg, big }: { k: string; v: number; neg?: boolean; big?: boolean }) => (
-    <div
-      className={`flex justify-between py-2 ${big ? 'border-t-2 border-black font-bold text-lg' : 'border-b'}`}
-    >
-      <span>{k}</span>
-      <span className={neg ? 'text-red-600' : big ? 'text-green-700' : ''}>
-        {neg ? '−' : ''}
-        {money(v)}
-      </span>
-    </div>
-  );
 
   return (
     <div className="p-4 md:p-6 max-w-2xl">
@@ -183,9 +209,10 @@ export default function DailyClient({
         <h3 className="font-bold mb-2">สรุปตามการชำระเงิน</h3>
         <Line k="เงินสด" v={cash} />
         <Line k="โอนจ่ายทันที" v={transfer} />
-        <Line k="เครดิต / ค้างชำระ" v={credit} neg />
-        <Line k={`หัก ค่าคอมมิชชั่น (${panels} แผง × ${rate})`} v={comm} neg />
-        <Line k="เงินสดสุทธิที่ต้องนำส่ง" v={netCash} big />
+        <Line k="เครดิต / ค้างชำระ (ยังไม่ได้รับเงิน)" v={credit} warn />
+        <Line k="ยอดขายรวม" v={total} sub />
+        <Line k={`หัก ค่าคอมมิชชั่น (${panels} แผง × ${rate})`} v={comm} minus />
+        <Line k="ยอดสุทธิหลังหักค่าคอม" v={net} big />
       </div>
     </div>
   );
