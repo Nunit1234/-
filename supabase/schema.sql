@@ -251,6 +251,14 @@ begin
   end loop;
 end $$;
 
+-- customer_prices: คนส่งบันทึก/แก้ราคาประจำร้านได้ (ใช้ตอนคีย์ราคาเองในหน้าขายสินค้า)
+drop policy if exists p_cprice_ins on customer_prices;
+create policy p_cprice_ins on customer_prices for insert
+  with check (auth.role() = 'authenticated');
+drop policy if exists p_cprice_upd on customer_prices;
+create policy p_cprice_upd on customer_prices for update
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+
 -- orders: แอดมินทั้งหมด / คนส่งเห็น+จัดการของตัวเอง
 drop policy if exists p_ord_admin   on orders;
 create policy p_ord_admin   on orders for all using (is_admin()) with check (is_admin());

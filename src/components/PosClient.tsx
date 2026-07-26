@@ -49,6 +49,9 @@ export default function PosClient({
   const [search, setSearch] = useState('');
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [cart, setCart] = useState<Record<string, number>>({});
+  // ราคาที่ผู้ใช้คีย์เองในบิลนี้ (เก็บเป็นข้อความ เพื่อให้ลบตัวเลขในช่องได้)
+  const [custom, setCustom] = useState<Record<string, string>>({});
+  const [remember, setRemember] = useState(false);
   const [payMethod, setPayMethod] = useState('CASH');
   const [deliveryId, setDeliveryId] = useState('');
   const [slipUrl, setSlipUrl] = useState('');
@@ -80,7 +83,32 @@ export default function PosClient({
     loadPrices(customerId);
   }, [customerId, loadPrices]);
 
-  const priceFor = (p: Product) => prices[p.id] ?? p.default_price;
+  // ราคาตั้งต้น: ราคาประจำร้าน (ถ้าเคยตั้งไว้) ไม่งั้นใช้ราคากลางของสินค้า
+  const basePriceFor = (p: Product) => prices[p.id] ?? p.default_price;
+
+  // ราคาที่ใช้จริงในบิลนี้: ถ้าคีย์เองไว้ให้ใช้ราคาที่คีย์
+  const priceFor = (p: Product) => {
+    const raw = custom[p.id];
+    if (raw !== undefined && raw !== '') {
+      const n = Number(raw);
+      if (!Number.isNaN(n) && n >= 0) return n;
+    }
+    return basePriceFor(p);
+  };
+
+  const isEdited = (p: Product) => custom[p.id] !== undefined && priceFor(p) !== basePriceFor(p);
+
+  function setPrice(pid: string, value: string) {
+    setCustom((c) => ({ ...c, [pid]: value }));
+  }
+
+  function resetPrice(pid: string) {
+    setCustom((c) => {
+      const next = { ...c };
+      delete next[pid];
+      return next;
+    });
+  }
   const stockOf = (p: Product) => (isAdmin ? p.stock : driverStock[p.id] ?? 0);
   const baseVisible = isAdmin
     ? products
@@ -100,6 +128,10 @@ export default function PosClient({
     const p = products.find((x) => x.id === pid);
     return s + (p ? Number(p.cost) : 0) * q;
   }, 0);
+  // รายการที่คีย์ราคาเอง ใช้ตัดสินใจว่าจะโชว์ช่องจำราคาประจำร้านไหม
+  const editedLines = lines
+    .map(([pid]) => products.find((x) => x.id === pid))
+    .filter((p): p is Product => !!p && isEdited(p));
 
   function setQty(pid: string, q: number) {
     setCart((c) => ({ ...c, [pid]: Math.max(0, q) }));
@@ -141,11 +173,27 @@ export default function PosClient({
       return;
     }
     setDoneCode(data?.code ?? 'สำเร็จ');
+
+    // จำราคาที่คีย์เองไว้เป็นราคาประจำร้าน (ถ้าติ๊กไว้) — ล้มเหลวก็ไม่กระทบบิลที่บันทึกไปแล้ว
+    if (remember && editedLines.length) {
+      const { error: priceErr } = await supabase.from('customer_prices').upsert(
+        editedLines.map((p) => ({
+          customer_id: customerId,
+          product_id: p.id,
+          price: priceFor(p),
+        }))
+      );
+      if (priceErr) setErr('บันทึกบิลแล้ว แต่จำราคาประจำร้านไม่สำเร็จ: ' + priceErr.message);
+      else await loadPrices(customerId);
+    }
+
     // ผูกออเดอร์กลับเข้าคิวจัดส่ง (ถ้าเปิดบิลจากคิว)
     if (schedId && data?.id) {
       await supabase.from('schedule').update({ order_id: data.id }).eq('id', schedId);
     }
     setCart({});
+    setCustom({});
+    setRemember(false);
     setSlipUrl('');
     setPayMethod('CASH');
     router.refresh();
@@ -194,7 +242,10 @@ export default function PosClient({
             <select
               className="border rounded-lg px-2 py-2 flex-1 min-w-0"
               value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
+              onChange={(e) => {
+                setCustomerId(e.target.value);
+                setCustom({}); // เปลี่ยนร้านแล้วราคาที่คีย์ไว้ใช้ไม่ได้ ต้องเริ่มจากราคาของร้านใหม่
+              }}
             >
               {customers.length === 0 && <option value="">— ยังไม่มีลูกค้า —</option>}
               {customers.map((c) => (
@@ -224,7 +275,9 @@ export default function PosClient({
             {visible.map((p) => {
               const q = cart[p.id] ?? 0;
               const st = stockOf(p);
-              const custom = prices[p.id] !== undefined;
+              const hasShopPrice = prices[p.id] !== undefined; // ร้านนี้เคยตั้งราคาไว้
+              const belowBase = priceFor(p) < basePriceFor(p);
+              const belowCost = priceFor(p) < Number(p.cost);
               return (
                 <div
                   key={p.id}
@@ -251,9 +304,14 @@ export default function PosClient({
                     </div>
                     <div className="text-sm font-semibold text-green-800 mt-0.5 flex flex-wrap gap-2 items-center">
                       {money(priceFor(p))}
-                      {custom && (
+                      {hasShopPrice && !isEdited(p) && (
                         <span className="text-[10px] bg-green-100 text-green-700 px-1.5 rounded">
-                          เฉพาะราย
+                          ราคาประจำร้าน
+                        </span>
+                      )}
+                      {isEdited(p) && (
+                        <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 rounded">
+                          คีย์ราคาเอง
                         </span>
                       )}
                       <span
@@ -264,6 +322,41 @@ export default function PosClient({
                         • เหลือ {fmtQty(st)} {p.unit}
                       </span>
                     </div>
+
+                    {q > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-1 items-center">
+                        <span className="text-xs text-gray-500">ราคาขาย</span>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          className={`w-24 border rounded-lg px-2 py-1 text-sm ${
+                            isEdited(p) ? 'border-amber-400 bg-amber-50 font-semibold' : ''
+                          }`}
+                          value={custom[p.id] ?? String(basePriceFor(p))}
+                          onChange={(e) => setPrice(p.id, e.target.value)}
+                          onFocus={(e) => e.target.select()}
+                        />
+                        <span className="text-xs text-gray-500">฿ / {p.unit}</span>
+                        {isEdited(p) && (
+                          <button
+                            className="text-xs text-gray-500 underline"
+                            onClick={() => resetPrice(p.id)}
+                          >
+                            คืนราคาเดิม ({money(basePriceFor(p))})
+                          </button>
+                        )}
+                        {belowCost && (
+                          <span className="text-xs text-red-600">
+                            ⚠ ต่ำกว่าทุน {money(Number(p.cost))}
+                          </span>
+                        )}
+                        {!belowCost && belowBase && (
+                          <span className="text-xs text-orange-600">
+                            ⚠ ต่ำกว่าราคาปกติ {money(basePriceFor(p))}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button
@@ -310,11 +403,31 @@ export default function PosClient({
                     <span>
                       {p.name}
                       <span className="text-gray-400"> × {q}</span>
+                      <span className={`block text-xs ${isEdited(p) ? 'text-amber-600' : 'text-gray-400'}`}>
+                        {money(priceFor(p))} / {p.unit}
+                        {isEdited(p) && ' (คีย์เอง)'}
+                      </span>
                     </span>
                     <span>{money(priceFor(p) * q)}</span>
                   </div>
                 );
               })
+            )}
+            {editedLines.length > 0 && customerId && (
+              <label className="flex items-start gap-2 mt-2 bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
+                />
+                <span>
+                  จำราคาที่คีย์ไว้เป็นราคาประจำร้านนี้ ({editedLines.length} รายการ)
+                  <span className="block text-gray-500">
+                    ครั้งหน้าเปิดบิลร้านนี้จะขึ้นราคานี้ให้เลย
+                  </span>
+                </span>
+              </label>
             )}
             <div className="flex justify-between font-bold text-lg mt-2">
               <span>รวมทั้งสิ้น</span>
