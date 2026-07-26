@@ -13,6 +13,7 @@ const NAV: Record<Role, [string, string][]> = {
     ['/orders', '📋 ออเดอร์'],
     ['/schedule', '🗓️ ตารางจัดส่ง'],
     ['/products', '🥚 สินค้า & สต๊อก'],
+    ['/intake', '🐣 รับไข่เข้าคลัง'],
     ['/vanstock', '📦 สต๊อกคนส่ง'],
     ['/claims', '♻️ เคลมสินค้า'],
     ['/customers', '👥 ลูกค้า & ราคา'],

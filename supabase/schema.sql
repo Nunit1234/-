@@ -19,6 +19,9 @@ exception when duplicate_object then null; end $$;
 do $$ begin
   create type expense_cat  as enum ('WAGE','COMMISSION','FUEL','OTHER');
 exception when duplicate_object then null; end $$;
+do $$ begin
+  create type intake_source as enum ('FARM','SUPPLIER');  -- ไข่จากฟาร์มเราเอง / รับมาจากร้านค้าส่ง
+exception when duplicate_object then null; end $$;
 
 -- ---------- profiles (ผู้ใช้ที่ล็อกอินได้: แอดมิน/คนส่ง) ----------
 create table if not exists profiles (
@@ -75,6 +78,28 @@ create table if not exists products (
   active        boolean not null default true,
   created_at    timestamptz not null default now()
 );
+
+-- ---------- stock_intakes (รับไข่เข้าคลัง: จากฟาร์มเราเอง / จากร้านค้าส่ง) ----------
+create table if not exists stock_intakes (
+  id         uuid primary key default gen_random_uuid(),
+  source     intake_source not null default 'FARM',
+  date       date not null default current_date,
+  supplier   text default '',            -- ชื่อร้านค้าส่ง (ว่างไว้ถ้าเป็นไข่จากฟาร์มเรา)
+  note       text default '',
+  total_cost numeric(12,2) not null default 0,
+  created_by uuid references profiles(id),
+  created_at timestamptz not null default now()
+);
+create table if not exists stock_intake_items (
+  id         uuid primary key default gen_random_uuid(),
+  intake_id  uuid references stock_intakes(id) on delete cascade,
+  product_id uuid references products(id),
+  name       text not null default '',    -- เก็บชื่อ/หน่วย/ทุน ณ ตอนรับเข้า เพื่อดูย้อนหลังได้ตรง
+  unit       text not null default '',
+  qty        numeric(12,2) not null,
+  cost       numeric(12,2) not null default 0
+);
+create index if not exists idx_intake_items_intake on stock_intake_items(intake_id);
 
 -- ---------- customer_prices (ราคาขายเฉพาะรายลูกค้า) ----------
 create table if not exists customer_prices (
@@ -251,6 +276,14 @@ begin
   end loop;
 end $$;
 
+-- stock_intakes: เฉพาะแอดมิน (รับไข่เข้าคลัง)
+alter table stock_intakes      enable row level security;
+alter table stock_intake_items enable row level security;
+drop policy if exists p_intake_admin on stock_intakes;
+create policy p_intake_admin on stock_intakes for all using (is_admin()) with check (is_admin());
+drop policy if exists p_intake_it_admin on stock_intake_items;
+create policy p_intake_it_admin on stock_intake_items for all using (is_admin()) with check (is_admin());
+
 -- customer_prices: คนส่งบันทึก/แก้ราคาประจำร้านได้ (ใช้ตอนคีย์ราคาเองในหน้าขายสินค้า)
 drop policy if exists p_cprice_ins on customer_prices;
 create policy p_cprice_ins on customer_prices for insert
@@ -394,6 +427,51 @@ begin
 end $$;
 
 grant execute on function create_order(uuid, uuid, pay_method, text, jsonb) to authenticated;
+
+-- ============================================================
+--  RPC: รับไข่เข้าคลัง (จากฟาร์มเราเอง หรือจากร้านค้าส่ง) — บวกเข้าสต๊อกกลาง
+-- ============================================================
+create or replace function create_intake(
+  p_source intake_source,
+  p_date date,
+  p_supplier text,
+  p_note text,
+  p_items jsonb   -- [{product_id, qty, name, unit, cost}]
+) returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  v_intake uuid;
+  v_total numeric := 0;
+  it jsonb; v_pid uuid; v_qty numeric; v_cost numeric;
+begin
+  if not is_admin() then raise exception 'เฉพาะแอดมิน'; end if;
+  if jsonb_array_length(p_items) = 0 then raise exception 'ยังไม่ได้เลือกสินค้า'; end if;
+
+  for it in select * from jsonb_array_elements(p_items) loop
+    v_qty := (it->>'qty')::numeric;
+    if coalesce(v_qty,0) <= 0 then
+      raise exception 'จำนวนต้องมากกว่า 0: %', coalesce(it->>'name','สินค้า');
+    end if;
+    v_total := v_total + coalesce((it->>'cost')::numeric, 0) * v_qty;
+  end loop;
+
+  insert into stock_intakes(source, date, supplier, note, total_cost, created_by)
+  values (p_source, coalesce(p_date, current_date), coalesce(p_supplier,''),
+          coalesce(p_note,''), v_total, auth.uid())
+  returning id into v_intake;
+
+  for it in select * from jsonb_array_elements(p_items) loop
+    v_pid  := (it->>'product_id')::uuid;
+    v_qty  := (it->>'qty')::numeric;
+    v_cost := coalesce((it->>'cost')::numeric, 0);
+    insert into stock_intake_items(intake_id, product_id, name, unit, qty, cost)
+      values (v_intake, v_pid, it->>'name', it->>'unit', v_qty, v_cost);
+    update products set stock = stock + v_qty where id = v_pid;
+  end loop;
+
+  return json_build_object('id', v_intake, 'total_cost', v_total);
+end $$;
+grant execute on function create_intake(intake_source, date, text, text, jsonb) to authenticated;
 
 -- ============================================================
 --  RPC: จ่ายสต๊อกให้คนส่ง (ตัดคลังหลัก + เพิ่มสต๊อกบนรถ + ใบคุม)
