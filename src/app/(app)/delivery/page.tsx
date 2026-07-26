@@ -10,7 +10,7 @@ export default async function DeliveryPage() {
   const { data: orders } = await supabase
     .from('orders')
     .select(
-      '*, customers(name, phone, address, location_url)'
+      '*, customers(name, phone, address, location_url), order_items(name, unit, qty)'
     )
     .eq('delivery_id', user!.id)
     .in('status', ['CONFIRMED', 'DELIVERING', 'DELIVERED'])
