@@ -182,7 +182,8 @@ export default function SettingsClient({ initial }: { initial: Settings }) {
       <div className="bg-white rounded-xl shadow p-4 mb-4">
         <h3 className="font-bold mb-2">🔔 แจ้งเตือน Telegram</h3>
         <p className="text-xs text-gray-500 mb-3">
-          ระบบส่งสรุปประจำวัน (ยอดขาย/กำไร/สต๊อก/เคลม) เข้า Telegram ทุกเที่ยงคืนอัตโนมัติ
+          ระบบส่งสรุปประจำวันเข้า Telegram ทุกเที่ยงคืนอัตโนมัติ — ยอดขาย/กำไร,
+          สต๊อกคงเหลือแยกรายชนิด (แต่ละอันเหลือกี่หน่วย) และสินค้าที่เคลมวันนี้ (อะไรบ้าง กี่หน่วย)
           — ตั้งค่าบอทได้ในไฟล์ <code>telegram-daily-report.sql</code>
         </p>
         <button
